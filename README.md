@@ -1,4 +1,4 @@
 shotgun
 =======
 
-better than just a [gun](/extend/gun)
+better than just a [gun](github.com/extend/gun)
