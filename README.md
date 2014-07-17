@@ -1,4 +1,4 @@
 shotgun
 =======
 
-better than just a gun
+better than just a [gun](/extend/gun)
