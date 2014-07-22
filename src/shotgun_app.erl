@@ -2,10 +2,8 @@
 -behavior(application).
 
 -export([
-         start/0
-        , start/2
-        , stop/0
-        , stop/1
+         start/2,
+         stop/1
         ]).
 
 start(_StartType, _StartArgs) ->
