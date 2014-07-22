@@ -1,0 +1,14 @@
+{application, shotgun,
+ [
+  {description,
+   "better than just a gun"},
+  {vsn, "0.1"},
+  {applications,
+    [kernel,
+     stdlib,
+     lager,
+     gun
+    ]},
+  {mod, {shotgun_app, []}}
+ ]
+}.
