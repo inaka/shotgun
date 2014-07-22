@@ -53,11 +53,17 @@ get(Pid, Url, Headers) ->
     get(Pid, Url, Headers, #{}).
 
 get(Pid, Url, Headers, Options) ->
-    case maps:is_key(stream, Options) of
-        true ->
+    StreamTo = maps_get(stream_to, Options, false),
+    Async = maps_get(async, Options, false),
+    case {StreamTo, Async} of
+        {false, false} ->
+            gen_fsm:sync_send_event(Pid, {get, Url, Headers});
+        {false, Async} ->
             gen_fsm:send_event(Pid, {asyncget, Url, Headers});
-        false ->
-            gen_fsm:sync_send_event(Pid, {get, Url, Headers})
+        {StreamTo, false} ->
+            gen_fsm:send_event(Pid, {asyncget, Url, Headers, StreamTo});
+        _ ->
+            gen_fsm:send_event(Pid, {asyncget, Url, Headers, StreamTo})
     end.
 
 -spec pop(Pid :: pid()) -> {binary()}.
@@ -100,7 +106,11 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 at_rest({asyncget, Url, Headers}, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
     NewState = clean_state(),
-    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef}}.
+    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef}};
+at_rest({asyncget, Url, Headers, StreamTo}, #{pid := Pid} = _State) ->
+    StreamRef = gun:get(Pid, Url, Headers),
+    NewState = clean_state(),
+    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef, stream_to := StreamTo}}.
 
 at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
@@ -151,13 +161,25 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_chunk({gun_data, _Pid, _StreamRef, nofin, Data},
-              #{responses := Responses} = State) ->
-    NewResponses = queue:in(Data, Responses),
-    {next_state, receive_chunk, State#{responses => NewResponses}};
+              #{responses := Responses, stream_to := StreamTo} = State) ->
+    case StreamTo of
+        undefined ->
+            NewResponses = queue:in(Data, Responses),
+            {next_state, receive_chunk, State#{responses => NewResponses}};
+        Pid ->
+            Pid ! Data,
+            {next_state, receive_chunk, State}
+    end;
 receive_chunk({gun_data, _Pid, _StreamRef, fin, Data},
-              #{responses := Responses} = State) ->
-    NewResponses = queue:in(Data, Responses),
-    {next_state, at_rest, State#{responses => NewResponses}};
+              #{responses := Responses, stream_to := StreamTo} = State) ->
+    case StreamTo of
+        undefined ->
+            NewResponses = queue:in(Data, Responses),
+            {next_state, receive_chunk, State#{responses => NewResponses}};
+        Pid ->
+            Pid ! Data,
+            {next_state, receive_chunk, State}
+    end;
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
@@ -165,9 +187,18 @@ receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
 clean_state() ->
     #{pid => undefined,
       stream => undefined,
+      stream_to => undefined,
       from => undefined,
       responses => queue:new(),
       data => <<"">>,
       status_code => undefined,
       headers => undefined
      }.
+
+maps_get(Key, Map, Default) ->
+    case maps:is_key(Key, Map) of
+        true ->
+            maps:get(Key, Map);
+        false ->
+            Default
+    end.
