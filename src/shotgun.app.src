@@ -9,6 +9,6 @@
      lager,
      gun
     ]},
-  {mod, {shotgun, []}}
+  {mod, {shotgun_app, []}}
  ]
 }.
