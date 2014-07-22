@@ -72,7 +72,7 @@ init([Host, Port]) ->
             {retry_timeout, 1}
            ],
     {ok, Pid} = gun:open(Host, Port, Opts),
-    {ok, open_state, #{pid => Pid}}.
+    {ok, at_rest, #{pid => Pid}}.
 
 handle_event(shutdown, _StateName, StateData) ->
     {stop, normal, StateData}.

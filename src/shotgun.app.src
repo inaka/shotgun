@@ -1,6 +1,6 @@
 {application, shotgun,
  [
-  {description,
+  {dessription,
    "better than just a gun"},
   {vsn, "0.1"},
   {applications,
@@ -8,7 +8,6 @@
      stdlib,
      lager,
      gun
-    ]},
-  {mod, {shotgun_app, []}}
+    ]}
  ]
 }.
