@@ -24,8 +24,8 @@
         ]).
 
 -export([
-         open_state/2,
-         open_state/3,
+         at_rest/2,
+         at_rest/3,
          wait_response/2,
          receive_data/2,
          receive_chunk/2
@@ -97,12 +97,12 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
     ok.
 
 %% state functions
-open_state({asyncget, Url, Headers}, #{pid := Pid} = _State) ->
+at_rest({asyncget, Url, Headers}, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
     NewState = clean_state(),
     {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef}}.
 
-open_state({get, Url, Headers}, From, #{pid := Pid} = _State) ->
+at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
 
     NewState = clean_state(),
@@ -115,7 +115,7 @@ wait_response({'DOWN', _, _, _, Reason}, _State) ->
 wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
               #{from := From} = State) ->
     gen_fsm:reply(From, #{status_code => StatusCode, headers => Headers}),
-    {next_state, open_state, State};
+    {next_state, at_rest, State};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers}, State) ->
     StateName = case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
                     {<<"transfer-encoding">>, <<"chunked">>} ->
@@ -142,10 +142,10 @@ receive_data({gun_data, _Pid, _StreamRef, fin, Data},
                           headers => Headers,
                           body => NewData
                          }),
-    {next_state, open_state, State};
+    {next_state, at_rest, State};
 receive_data({gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = State) ->
-    {next_state, open_state, State}.
+    {next_state, at_rest, State}.
 
 %% chunked data response
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
@@ -157,9 +157,9 @@ receive_chunk({gun_data, _Pid, _StreamRef, nofin, Data},
 receive_chunk({gun_data, _Pid, _StreamRef, fin, Data},
               #{responses := Responses} = State) ->
     NewResponses = queue:in(Data, Responses),
-    {next_state, open_state, State#{responses => NewResponses}};
+    {next_state, at_rest, State#{responses => NewResponses}};
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
-    {next_state, open_state, State}.
+    {next_state, at_rest, State}.
 
 %% internal
 clean_state() ->
