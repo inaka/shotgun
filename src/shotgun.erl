@@ -162,24 +162,10 @@ receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_chunk({gun_data, _Pid, _StreamRef, nofin, Data},
               #{responses := Responses, stream_to := StreamTo} = State) ->
-    case StreamTo of
-        undefined ->
-            NewResponses = queue:in(Data, Responses),
-            {next_state, receive_chunk, State#{responses => NewResponses}};
-        Pid ->
-            Pid ! Data,
-            {next_state, receive_chunk, State}
-    end;
+    manage_chunk(StreamTo, Data, Responses, State);
 receive_chunk({gun_data, _Pid, _StreamRef, fin, Data},
               #{responses := Responses, stream_to := StreamTo} = State) ->
-    case StreamTo of
-        undefined ->
-            NewResponses = queue:in(Data, Responses),
-            {next_state, receive_chunk, State#{responses => NewResponses}};
-        Pid ->
-            Pid ! Data,
-            {next_state, receive_chunk, State}
-    end;
+    manage_chunk(StreamTo, Data, Responses, State);
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
@@ -202,3 +188,10 @@ maps_get(Key, Map, Default) ->
         false ->
             Default
     end.
+
+manage_chunk(undefined, Data, Responses, State) ->
+    NewResponses = queue:in(Data, Responses),
+    {next_state, receive_chunk, State#{responses => NewResponses}};
+manage_chunk(StreamTo, Data, _Responses, State) ->
+    StreamTo ! Data,
+    {next_state, receive_chunk, State}.
