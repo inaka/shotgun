@@ -60,8 +60,6 @@ get(Pid, Url, Headers, Options) ->
             gen_fsm:sync_send_event(Pid, {get, Url, Headers});
         {undefined, Async} ->
             gen_fsm:send_event(Pid, {asyncget, Url, Headers});
-        {HandleEvent, undefined} ->
-            gen_fsm:send_event(Pid, {asyncget, Url, Headers, HandleEvent});
         _ ->
             gen_fsm:send_event(Pid, {asyncget, Url, Headers, HandleEvent})
     end.
