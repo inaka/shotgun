@@ -24,7 +24,6 @@
         ]).
 
 -export([
-         at_rest/2,
          at_rest/3,
          wait_response/2,
          receive_data/2,
@@ -59,9 +58,9 @@ get(Pid, Url, Headers, Options) ->
         {undefined, undefined} ->
             gen_fsm:sync_send_event(Pid, {get, Url, Headers});
         {undefined, Async} ->
-            gen_fsm:send_event(Pid, {asyncget, Url, Headers});
+            gen_fsm:sync_send_event(Pid, {asyncget, Url, Headers});
         _ ->
-            gen_fsm:send_event(Pid, {asyncget, Url, Headers, HandleEvent})
+            gen_fsm:sync_send_event(Pid, {asyncget, Url, Headers, HandleEvent})
     end.
 
 -spec pop(Pid :: pid()) -> {binary()}.
@@ -101,15 +100,16 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
     ok.
 
 %% state functions
-at_rest({asyncget, Url, Headers}, #{pid := Pid} = _State) ->
+at_rest({asyncget, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
+    gen_fsm:reply(From, StreamRef),
     NewState = clean_state(),
     {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef}};
-at_rest({asyncget, Url, Headers, HandleEvent}, #{pid := Pid} = _State) ->
+at_rest({asyncget, Url, Headers, HandleEvent}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
+    gen_fsm:reply(From, StreamRef),
     NewState = clean_state(),
-    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef, handle_event := HandleEvent}}.
-
+    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef, handle_event := HandleEvent}};
 at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
 
