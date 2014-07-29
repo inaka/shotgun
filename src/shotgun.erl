@@ -6,6 +6,7 @@
 -export([
          start/0,
          stop/0,
+         start_link/2,
          open/2,
          close/1,
          get/2,
@@ -36,9 +37,12 @@ start() ->
 stop() ->
     application:stop(shotgun).
 
+start_link(Host, Port) ->
+    gen_fsm:start(shotgun, [Host, Port], []).
+
 -spec open(Host :: string(), Port :: integer()) -> {ok, pid()}.
 open(Host, Port) ->
-    gen_fsm:start(shotgun, [Host, Port], []).
+    supervisor:start_child(shotgun_sup, [Host, Port]).
 
 -spec close(pid()) -> ok.
 close(Pid) ->
