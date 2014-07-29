@@ -8,6 +8,7 @@
      stdlib,
      lager,
      gun
-    ]}
+    ]},
+  {mod, {shotgun_app, []}}
  ]
 }.
