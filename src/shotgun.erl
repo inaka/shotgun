@@ -28,7 +28,8 @@
          at_rest/3,
          wait_response/2,
          receive_data/2,
-         receive_chunk/2
+         receive_chunk/2,
+         parse_event/1
         ]).
 
 start() ->
@@ -57,7 +58,7 @@ get(Pid, Url, Headers) ->
 
 get(Pid, Url, HeadersMap, Options) ->
     Headers = maps:to_list(HeadersMap),
-    
+
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, undefined),
     case {HandleEvent, Async} of
@@ -164,12 +165,29 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 %% chunked data response
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
-receive_chunk({gun_data, _Pid, StreamRef, nofin, Data},
-              #{responses := Responses, handle_event := HandleEvent} = State) ->
-    manage_chunk(nofin, HandleEvent, StreamRef, Data, Responses, State);
-receive_chunk({gun_data, _Pid, StreamRef, fin, Data},
-              #{responses := Responses, handle_event := HandleEvent} = State) ->
-    manage_chunk(fin, HandleEvent, StreamRef, Data, Responses, State);
+receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data},
+              #{
+                handle_event := HandleEvent,
+                buffer := Buffer
+               } = State) ->
+    NewBuffer = <<Buffer/binary, Data/binary>>,
+    DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
+
+    case lists:reverse(DataList) of
+        [_] ->
+            {next_state, receive_chunk, State#{buffer := NewBuffer}};
+        [Last | Start] ->
+            lists:foreach(
+              fun(Event) ->
+                      HandleEvent(IsFin, StreamRef, Event)
+              end, Start),
+            case Last of
+                <<>> ->
+                    {next_state, receive_chunk, State#{buffer := <<"">>}};
+                _ ->
+                    {next_state, receive_chunk, State#{buffer := Last}}
+            end
+    end;
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
@@ -182,7 +200,8 @@ clean_state() ->
       responses => queue:new(),
       data => <<"">>,
       status_code => undefined,
-      headers => undefined
+      headers => undefined,
+      buffer => <<"">>
      }.
 
 maps_get(Key, Map, Default) ->
@@ -193,9 +212,18 @@ maps_get(Key, Map, Default) ->
             Default
     end.
 
-manage_chunk(IsFin, undefined, StreamRef, Data, Responses, State) ->
-    NewResponses = queue:in({IsFin, StreamRef, Data}, Responses),
-    {next_state, receive_chunk, State#{responses => NewResponses}};
-manage_chunk(IsFin, HandleEvent, StreamRef, Data, _Responses, State) ->
-    HandleEvent(IsFin, StreamRef, Data),
-    {next_state, receive_chunk, State}.
+parse_event(Event) ->
+    Lines = binary:split(Event, <<"\n">>, [global]),
+    lists:foldl(
+      fun(Line, {DataList, _, _} = Result) ->
+              case Line of
+                  <<"data: ", Data/binary>> ->
+                      Data;
+                  <<"id: ", Id/binary>> ->
+                      
+                  <<"event: ", Event/binary>> ->
+                      Event;
+              end
+      end, {[], undefined, undefined}, Lines).
+
+%%     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses)    
