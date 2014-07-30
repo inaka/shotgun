@@ -50,12 +50,14 @@ close(Pid) ->
     ok.
 
 get(Pid, Url) ->
-    get(Pid, Url, [], #{}).
+    get(Pid, Url, #{}, #{}).
 
 get(Pid, Url, Headers) ->
     get(Pid, Url, Headers, #{}).
 
-get(Pid, Url, Headers, Options) ->
+get(Pid, Url, HeadersMap, Options) ->
+    Headers = maps:to_list(HeadersMap),
+    
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, undefined),
     case {HandleEvent, Async} of
