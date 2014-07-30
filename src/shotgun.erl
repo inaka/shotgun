@@ -214,11 +214,11 @@ maps_get(Key, Map, Default) ->
 
 parse_event(Event) ->
     Lines = binary:split(Event, <<"\n">>, [global]),
-    lists:foldl(
+    lists:foldr(
       fun(Line, {DataList, _, _} = Result) ->
               case Line of
                   <<"data: ", Data/binary>> ->
-                      Data;
+                      { };
                   <<"id: ", Id/binary>> ->
                       
                   <<"event: ", Event/binary>> ->
