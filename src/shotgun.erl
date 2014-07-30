@@ -42,7 +42,8 @@
          at_rest/3,
          wait_response/2,
          receive_data/2,
-         receive_chunk/2
+         receive_chunk/2,
+         parse_event/1
         ]).
 
 -type response() ::
@@ -305,12 +306,29 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 -spec receive_chunk(term(), term()) -> term().
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
-receive_chunk({gun_data, _Pid, StreamRef, nofin, Data},
-              #{responses := Responses, handle_event := HandleEvent} = State) ->
-    manage_chunk(nofin, HandleEvent, StreamRef, Data, Responses, State);
-receive_chunk({gun_data, _Pid, StreamRef, fin, Data},
-              #{responses := Responses, handle_event := HandleEvent} = State) ->
-    manage_chunk(fin, HandleEvent, StreamRef, Data, Responses, State);
+receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data},
+              #{
+                handle_event := HandleEvent,
+                buffer := Buffer
+               } = State) ->
+    NewBuffer = <<Buffer/binary, Data/binary>>,
+    DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
+
+    case lists:reverse(DataList) of
+        [_] ->
+            {next_state, receive_chunk, State#{buffer := NewBuffer}};
+        [Last | Start] ->
+            lists:foreach(
+              fun(Event) ->
+                      HandleEvent(IsFin, StreamRef, Event)
+              end, Start),
+            case Last of
+                <<>> ->
+                    {next_state, receive_chunk, State#{buffer := <<"">>}};
+                _ ->
+                    {next_state, receive_chunk, State#{buffer := Last}}
+            end
+    end;
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
@@ -389,3 +407,19 @@ encode_basic_auth([], []) ->
     [];
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
+
+parse_event(Event) ->
+    Lines = binary:split(Event, <<"\n">>, [global]),
+    FoldFun = fun(Line, {DataList, Id, EventName}) ->
+                  case Line of
+                      <<"data: ", Data/binary>> ->
+                          {[Data | DataList], Id, EventName};
+                      <<"id: ", NewId/binary>> ->
+                          {DataList, NewId, EventName};
+                      <<"event: ", NewEventName/binary>> ->
+                          {DataList, Id, NewEventName}
+                  end
+          end,
+    lists:foldr(FoldFun, {[], undefined, undefined}, Lines).
+
+%%     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses)
