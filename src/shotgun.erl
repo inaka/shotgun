@@ -12,7 +12,7 @@
          get/2,
          get/3,
          get/4,
-         pop/1
+         events/1
         ]).
 
 -export([
@@ -83,8 +83,8 @@ get(Pid, Url, HeadersMap, Options) ->
             gen_fsm:sync_send_event(Pid, {asyncget, Url, Headers, HandleEvent})
     end.
 
--spec pop(Pid :: pid()) -> {binary()}.
-pop(Pid) ->
+-spec events(Pid :: pid()) -> {binary()}.
+events(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, get_response).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -99,24 +99,21 @@ init([Host, Port]) ->
             {retry_timeout, 1}
            ],
     {ok, Pid} = gun:open(Host, Port, Opts),
-    {ok, at_rest, #{pid => Pid}}.
+    State = clean_state(),
+    {ok, at_rest, State#{pid => Pid}}.
 
 -spec handle_event(term(), atom(), term()) -> term().
 handle_event(shutdown, _StateName, StateData) ->
     {stop, normal, StateData}.
 
--spec handle_sync_event(term(), {pid(), term()}, atom(), term()) -> term().
+-spec handle_sync_event(term(), {pid(), term()}, atom(), term()) ->
+    term().
 handle_sync_event(get_response,
                   _From,
                   StateName,
                   #{responses := Responses} = State) ->
-    {Reply, NewResponses} = case queue:out(Responses) of
-                                {{value, Response}, NewQueue} ->
-                                    {Response, NewQueue};
-                                {empty, Responses} ->
-                                    {no_data, Responses}
-                            end,
-    {reply, Reply, StateName, State#{responses := NewResponses}}.
+    Reply = queue:to_list(Responses),
+    {reply, Reply, StateName, State#{responses := queue:new()}}.
 
 -spec handle_info(term(), atom(), term()) -> term().
 handle_info(Event, StateName, StateData) ->
@@ -146,13 +143,10 @@ at_rest({asyncget, Url, Headers, HandleEvent}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
     gen_fsm:reply(From, StreamRef),
     NewState = clean_state(),
-    {next_state,
-     wait_response,
-     NewState#{
-       pid := Pid,
-       stream := StreamRef,
-       handle_event := HandleEvent
-      }
+    {
+      next_state,
+      wait_response,
+      NewState#{pid := Pid, stream := StreamRef, handle_event := HandleEvent}
     };
 at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
@@ -177,12 +171,10 @@ wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
                     _ ->
                         receive_data
                 end,
-    {next_state,
-     StateName,
-     State#{
-       status_code := StatusCode,
-       headers := Headers
-      }
+    {
+      next_state,
+      StateName,
+      State#{status_code := StatusCode, headers := Headers}
     };
 wait_response(Event, State) ->
     {stop, {unexpected, Event}, State}.
