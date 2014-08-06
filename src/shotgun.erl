@@ -31,12 +31,23 @@
          receive_chunk/2
         ]).
 
-start() ->
-    {ok, _Started} = application:ensure_all_started(shotgun).
+-type response() :: #{}.
+-type headers() :: #{}.
+-type options() :: [].
 
+-spec start() -> {ok, [atom()]}.
+start() ->
+    {ok, _} = application:ensure_all_started(shotgun).
+
+-spec stop() -> ok | {error, term()}.
 stop() ->
     application:stop(shotgun).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% API
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec start_link(string(), integer()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Host, Port) ->
     gen_fsm:start(shotgun, [Host, Port], []).
 
@@ -49,15 +60,18 @@ close(Pid) ->
     gen_fsm:send_all_state_event(Pid, 'shutdown'),
     ok.
 
+-spec get(pid(), string()) -> response().
 get(Pid, Url) ->
     get(Pid, Url, #{}, #{}).
 
+-spec get(pid(), string(), headers()) -> response().
 get(Pid, Url, Headers) ->
     get(Pid, Url, Headers, #{}).
 
+-spec get(pid(), string(), headers(), options()) -> response().
 get(Pid, Url, HeadersMap, Options) ->
     Headers = maps:to_list(HeadersMap),
-    
+
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, undefined),
     case {HandleEvent, Async} of
@@ -73,7 +87,11 @@ get(Pid, Url, HeadersMap, Options) ->
 pop(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, get_response).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_fsm callbacks
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec init([term()]) -> term().
 init([Host, Port]) ->
     Opts = [
             {type, tcp},
@@ -83,10 +101,15 @@ init([Host, Port]) ->
     {ok, Pid} = gun:open(Host, Port, Opts),
     {ok, at_rest, #{pid => Pid}}.
 
+-spec handle_event(term(), atom(), term()) -> term().
 handle_event(shutdown, _StateName, StateData) ->
     {stop, normal, StateData}.
 
-handle_sync_event(get_response, _From, StateName, #{responses := Responses} = State) ->
+-spec handle_sync_event(term(), {pid(), term()}, atom(), term()) -> term().
+handle_sync_event(get_response,
+                  _From,
+                  StateName,
+                  #{responses := Responses} = State) ->
     {Reply, NewResponses} = case queue:out(Responses) of
                                 {{value, Response}, NewQueue} ->
                                     {Response, NewQueue};
@@ -95,17 +118,25 @@ handle_sync_event(get_response, _From, StateName, #{responses := Responses} = St
                             end,
     {reply, Reply, StateName, State#{responses := NewResponses}}.
 
+-spec handle_info(term(), atom(), term()) -> term().
 handle_info(Event, StateName, StateData) ->
-    ?MODULE:StateName(Event, StateData).
+    Module = ?MODULE,
+    Module:StateName(Event, StateData).
 
+-spec code_change(term(), atom(), term(), term()) -> {ok, atom(), term()}.
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
+-spec terminate(term(), atom(), term()) -> ok.
 terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
     gun:shutdown(Pid),
     ok.
 
-%% state functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% gen_fsm states
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec at_rest(term(), pid(), term()) -> term().
 at_rest({asyncget, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
     gen_fsm:reply(From, StreamRef),
@@ -115,7 +146,14 @@ at_rest({asyncget, Url, Headers, HandleEvent}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
     gen_fsm:reply(From, StreamRef),
     NewState = clean_state(),
-    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef, handle_event := HandleEvent}};
+    {next_state,
+     wait_response,
+     NewState#{
+       pid := Pid,
+       stream := StreamRef,
+       handle_event := HandleEvent
+      }
+    };
 at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
 
@@ -124,24 +162,33 @@ at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
                                           stream := StreamRef,
                                           from := From}}.
 
+-spec wait_response(term(), term()) -> term().
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
     exit(Reason);
 wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
               #{from := From} = State) ->
     gen_fsm:reply(From, #{status_code => StatusCode, headers => Headers}),
     {next_state, at_rest, State};
-wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers}, State) ->
+wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
+              State) ->
     StateName = case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
                     {<<"transfer-encoding">>, <<"chunked">>} ->
                         receive_chunk;
                     _ ->
                         receive_data
                 end,
-    {next_state, StateName, State#{status_code := StatusCode, headers := Headers}};
+    {next_state,
+     StateName,
+     State#{
+       status_code := StatusCode,
+       headers := Headers
+      }
+    };
 wait_response(Event, State) ->
     {stop, {unexpected, Event}, State}.
 
 %% regular response
+-spec receive_data(term(), term()) -> term().
 receive_data({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_data({gun_data, _Pid, StreamRef, nofin, Data},
@@ -162,6 +209,7 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
     {next_state, at_rest, State}.
 
 %% chunked data response
+-spec receive_chunk(term(), term()) -> term().
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_chunk({gun_data, _Pid, StreamRef, nofin, Data},

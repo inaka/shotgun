@@ -7,7 +7,7 @@ dep_sync = https://github.com/rustyio/sync.git master
 
 include erlang.mk
 
-ERLC_OPTS += +'{parse_transform, lager_transform}'
+ERLC_OPTS += +'{parse_transform, lager_transform}' +warn_missing_spec
 TEST_ERLC_OPTS += +'{parse_transform, lager_transform}'
 
 RUN := erl -pa ebin -pa deps/*/ebin -smp enable -s sync -boot start_sasl ${ERL_ARGS}
