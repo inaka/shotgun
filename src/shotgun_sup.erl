@@ -12,6 +12,7 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+-spec init(term()) -> term().
 init([]) ->
     Procs = [{shotgun, {shotgun, start_link, []},
               temporary, 5000, worker, [shotgun]}],
