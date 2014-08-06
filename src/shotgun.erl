@@ -70,7 +70,7 @@ get(Pid, Url, Headers) ->
 
 -spec get(pid(), string(), headers(), options()) -> response().
 get(Pid, Url, HeadersMap, Options) ->
-    Headers = maps:to_list(HeadersMap),
+    Headers = basic_auth_header(Options, maps:to_list(HeadersMap)),
 
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, undefined),
@@ -83,7 +83,7 @@ get(Pid, Url, HeadersMap, Options) ->
             gen_fsm:sync_send_event(Pid, {asyncget, Url, Headers, HandleEvent})
     end.
 
--spec events(Pid :: pid()) -> {binary()}.
+-spec events(Pid :: pid()) -> [{nofin | fin, reference(), binary()}].
 events(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, get_response).
 
@@ -152,9 +152,11 @@ at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
     StreamRef = gun:get(Pid, Url, Headers),
 
     NewState = clean_state(),
-    {next_state, wait_response, NewState#{pid := Pid,
-                                          stream := StreamRef,
-                                          from := From}}.
+    {
+      next_state,
+      wait_response,
+      NewState#{pid := Pid, stream := StreamRef, from := From}
+    }.
 
 -spec wait_response(term(), term()) -> term().
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
@@ -213,7 +215,10 @@ receive_chunk({gun_data, _Pid, StreamRef, fin, Data},
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
-%% internal
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Private
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 clean_state() ->
     #{pid => undefined,
       stream => undefined,
@@ -239,3 +244,18 @@ manage_chunk(IsFin, undefined, StreamRef, Data, Responses, State) ->
 manage_chunk(IsFin, HandleEvent, StreamRef, Data, _Responses, State) ->
     HandleEvent(IsFin, StreamRef, Data),
     {next_state, receive_chunk, State}.
+
+basic_auth_header(Options, Headers) ->
+    case maps_get(basic_auth, Options, undefined) of
+        undefined ->
+            Headers;
+        {User, Password} ->
+            Base64 = encode_basic_auth(User, Password),
+            BasicAuth = {<<"Authorization">>, <<"Basic", Base64/binary>>},
+            [BasicAuth | Headers]
+    end.
+
+encode_basic_auth([], []) ->
+    [];
+encode_basic_auth(Username, Password) ->
+    base64:encode(Username ++ [$: | Password]).
