@@ -189,26 +189,25 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec at_rest(term(), pid(), term()) -> term().
-at_rest({Verb, IsAsync, HandleEvent, Args}, From, #{pid := Pid}) ->
+at_rest({Verb, true, HandleEvent, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(Verb, Pid, Args),
     CleanState = clean_state(),
-    NewState =
-        case IsAsync of
-            true ->
-                gen_fsm:reply(From, StreamRef),
-                CleanState#{
+    NewState = CleanState#{
                   pid => Pid,
                   stream => StreamRef,
                   handle_event => HandleEvent,
                   async => true
-                 };
-            _ ->
-                CleanState#{
-                  pid => Pid,
-                  stream => StreamRef,
-                  from => From
-                 }
-        end,
+                },
+    gen_fsm:reply(From, StreamRef),
+    {next_state, wait_response, NewState};
+at_rest({Verb, false, _HandleEvent, Args}, From, #{pid := Pid}) ->
+    StreamRef = do_http_verb(Verb, Pid, Args),
+    CleanState = clean_state(),
+    NewState = CleanState#{
+                 pid => Pid,
+                 stream => StreamRef,
+                 from => From
+                },
     {next_state, wait_response, NewState}.
 
 -spec wait_response(term(), term()) -> term().
