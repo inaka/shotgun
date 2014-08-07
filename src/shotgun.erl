@@ -45,7 +45,13 @@
          receive_chunk/2
         ]).
 
--type response() :: #{} | reference().
+-type response() ::
+        #{
+           status_code => integer(),
+           header => map(),
+           body => binary()
+         }.
+-type result() :: {ok, reference() | response()} | {error, term()}.
 -type headers() :: #{}.
 -type options() ::
         #{
@@ -81,65 +87,97 @@ close(Pid) ->
     ok.
 
 %% GET
--spec get(pid(), string()) -> response().
+-spec get(pid(), string()) -> result().
 get(Pid, Url) ->
     get(Pid, Url, #{}, #{}).
 
--spec get(pid(), string(), headers()) -> response().
+-spec get(pid(), string(), headers()) -> result().
 get(Pid, Url, Headers) ->
     get(Pid, Url, Headers, #{}).
 
--spec get(pid(), string(), headers(), options()) -> response().
+-spec get(pid(), string(), headers(), options()) -> result().
 get(Pid, Url, Headers0, Options) ->
     {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0, get),
-    GetVerb = case IsAsync of
-               true -> get_async;
-               false -> get
+    Event = case IsAsync of
+                true ->
+                    {get_async, HandleEvent, {Url, Headers}};
+                false ->
+                    {get, {Url, Headers}}
            end,
-    Event = {GetVerb, HandleEvent, {Url, Headers}},
-    gen_fsm:sync_send_event(Pid, Event).
+    StreamRef = gen_fsm:sync_send_event(Pid, Event),
+    {ok, StreamRef}.
 
 %% POST
--spec post(pid(), string(), headers(), iodata(), options()) -> response().
+-spec post(pid(), string(), headers(), iodata(), options()) -> result().
 post(Pid, Url, Headers0, Body, Options) ->
-    {HandleEvent, _, Headers} = process_options(Options, Headers0, post),
-    Event = {post, HandleEvent, {Url, Headers, Body}},
-    gen_fsm:sync_send_event(Pid, Event).
+    try
+        {HandleEvent, _, Headers} = process_options(Options, Headers0, post),
+        Event = {post, {Url, Headers, Body}},
+        StreamRef = gen_fsm:sync_send_event(Pid, Event),
+        {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %% DELETE
--spec delete(pid(), string(), headers(), options()) -> response().
+-spec delete(pid(), string(), headers(), options()) -> result().
 delete(Pid, Url, Headers0, Options) ->
-    {HandleEvent, _, Headers} = process_options(Options, Headers0, delete),
-    Event = {delete, HandleEvent, {Url, Headers}},
-    gen_fsm:sync_send_event(Pid, Event).
+    try
+        {HandleEvent, _, Headers} = process_options(Options, Headers0, delete),
+        Event = {delete, {Url, Headers}},
+        StreamRef = gen_fsm:sync_send_event(Pid, Event),
+        {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %% HEAD
--spec head(pid(), string(), headers(), options()) -> response().
+-spec head(pid(), string(), headers(), options()) -> result().
 head(Pid, Url, Headers0, Options) ->
-    {HandleEvent, _, Headers} = process_options(Options, Headers0, head),
-    Event = {head, HandleEvent, {Url, Headers}},
-    gen_fsm:sync_send_event(Pid, Event).
+    try
+        {HandleEvent, _, Headers} = process_options(Options, Headers0, head),
+        Event = {head, {Url, Headers}},
+        StreamRef = gen_fsm:sync_send_event(Pid, Event),
+        {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %% OPTIONS
--spec options(pid(), string(), headers(), options()) -> response().
+-spec options(pid(), string(), headers(), options()) -> result().
 options(Pid, Url, Headers0, Options) ->
-    {HandleEvent, _, Headers} = process_options(Options, Headers0, options),
-    Event = {options, HandleEvent, {Url, Headers}},
-    gen_fsm:sync_send_event(Pid, Event).
+    try
+        {HandleEvent, _, Headers} = process_options(Options, Headers0, options),
+        Event = {options, {Url, Headers}},
+        StreamRef = gen_fsm:sync_send_event(Pid, Event),
+        {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %% PATCH
--spec patch(pid(), string(), headers(), iodata(), options()) -> response().
+-spec patch(pid(), string(), headers(), iodata(), options()) -> result().
 patch(Pid, Url, Headers0, Body, Options) ->
-    {HandleEvent, _, Headers} = process_options(Options, Headers0, patch),
-    Event = {patch, HandleEvent, {Url, Headers, Body}},
-    gen_fsm:sync_send_event(Pid, Event).
+    try
+        {HandleEvent, _, Headers} = process_options(Options, Headers0, patch),
+        Event = {patch, {Url, Headers, Body}},
+        StreamRef = gen_fsm:sync_send_event(Pid, Event),
+        {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %% PUT
--spec put(pid(), string(), headers(), iodata(), options()) -> response().
+-spec put(pid(), string(), headers(), iodata(), options()) -> result().
 put(Pid, Url, Headers0, Body, Options) ->
-    {HandleEvent, _, Headers} = process_options(Options, Headers0, put),
-    Event = {put, HandleEvent, {Url, Headers, Body}},
-    gen_fsm:sync_send_event(Pid, Event).
+    try
+        {HandleEvent, _, Headers} = process_options(Options, Headers0, put),
+        Event = {put, {Url, Headers, Body}},
+        StreamRef = gen_fsm:sync_send_event(Pid, Event),
+        {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %% @doc Returns a list of all received events up to now.
 -spec events(Pid :: pid()) -> [{nofin | fin, reference(), binary()}].
@@ -204,7 +242,7 @@ at_rest({get_async, HandleEvent, Args}, From, #{pid := Pid}) ->
                 },
     gen_fsm:reply(From, StreamRef),
     {next_state, wait_response, NewState};
-at_rest({HttpVerb, _HandleEvent, Args}, From, #{pid := Pid}) ->
+at_rest({HttpVerb, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
     CleanState = clean_state(),
     NewState = CleanState#{
