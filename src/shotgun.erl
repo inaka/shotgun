@@ -91,50 +91,54 @@ get(Pid, Url, Headers) ->
 
 -spec get(pid(), string(), headers(), options()) -> response().
 get(Pid, Url, Headers0, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {get, IsAsync, HandleEvent, {Url, Headers}},
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0, get),
+    GetVerb = case IsAsync of
+               true -> get_async;
+               false -> get
+           end,
+    Event = {GetVerb, HandleEvent, {Url, Headers}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% POST
 -spec post(pid(), string(), headers(), iodata(), options()) -> response().
 post(Pid, Url, Headers0, Body, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {post, IsAsync, HandleEvent, {Url, Headers, Body}},
+    {HandleEvent, _, Headers} = process_options(Options, Headers0, post),
+    Event = {post, HandleEvent, {Url, Headers, Body}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% DELETE
 -spec delete(pid(), string(), headers(), options()) -> response().
 delete(Pid, Url, Headers0, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {delete, IsAsync, HandleEvent, {Url, Headers}},
+    {HandleEvent, _, Headers} = process_options(Options, Headers0, delete),
+    Event = {delete, HandleEvent, {Url, Headers}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% HEAD
 -spec head(pid(), string(), headers(), options()) -> response().
 head(Pid, Url, Headers0, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {head, IsAsync, HandleEvent, {Url, Headers}},
+    {HandleEvent, _, Headers} = process_options(Options, Headers0, head),
+    Event = {head, HandleEvent, {Url, Headers}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% OPTIONS
 -spec options(pid(), string(), headers(), options()) -> response().
 options(Pid, Url, Headers0, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {options, IsAsync, HandleEvent, {Url, Headers}},
+    {HandleEvent, _, Headers} = process_options(Options, Headers0, options),
+    Event = {options, HandleEvent, {Url, Headers}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% PATCH
 -spec patch(pid(), string(), headers(), iodata(), options()) -> response().
 patch(Pid, Url, Headers0, Body, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {patch, IsAsync, HandleEvent, {Url, Headers, Body}},
+    {HandleEvent, _, Headers} = process_options(Options, Headers0, patch),
+    Event = {patch, HandleEvent, {Url, Headers, Body}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% PUT
 -spec put(pid(), string(), headers(), iodata(), options()) -> response().
 put(Pid, Url, Headers0, Body, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
-    Event = {put, IsAsync, HandleEvent, {Url, Headers, Body}},
+    {HandleEvent, _, Headers} = process_options(Options, Headers0, put),
+    Event = {put, HandleEvent, {Url, Headers, Body}},
     gen_fsm:sync_send_event(Pid, Event).
 
 %% @doc Returns a list of all received events up to now.
@@ -189,8 +193,8 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec at_rest(term(), pid(), term()) -> term().
-at_rest({Verb, true, HandleEvent, Args}, From, #{pid := Pid}) ->
-    StreamRef = do_http_verb(Verb, Pid, Args),
+at_rest({get_async, HandleEvent, Args}, From, #{pid := Pid}) ->
+    StreamRef = do_http_verb(get, Pid, Args),
     CleanState = clean_state(),
     NewState = CleanState#{
                   pid => Pid,
@@ -200,8 +204,8 @@ at_rest({Verb, true, HandleEvent, Args}, From, #{pid := Pid}) ->
                 },
     gen_fsm:reply(From, StreamRef),
     {next_state, wait_response, NewState};
-at_rest({Verb, false, _HandleEvent, Args}, From, #{pid := Pid}) ->
-    StreamRef = do_http_verb(Verb, Pid, Args),
+at_rest({HttpVerb, _HandleEvent, Args}, From, #{pid := Pid}) ->
+    StreamRef = do_http_verb(HttpVerb, Pid, Args),
     CleanState = clean_state(),
     NewState = CleanState#{
                  pid => Pid,
@@ -320,11 +324,15 @@ manage_chunk(IsFin, HandleEvent, StreamRef, Data, _Responses, State) ->
     HandleEvent(IsFin, StreamRef, Data),
     {next_state, receive_chunk, State}.
 
-process_options(Options, HeadersMap) ->
+process_options(Options, HeadersMap, HttpVerb) ->
     Headers = basic_auth_header(Options, maps:to_list(HeadersMap)),
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, false),
-
+    case {Async, HttpVerb} of
+        {true, get} -> ok;
+        {true, Other} -> throw({async_unsupported, Other});
+        _ -> ok
+    end,
     {HandleEvent, Async, Headers}.
 
 basic_auth_header(Options, Headers) ->
