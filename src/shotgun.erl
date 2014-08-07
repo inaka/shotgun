@@ -189,49 +189,38 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec at_rest(term(), pid(), term()) -> term().
-at_rest({Verb, IsAsync, HandleEvent, Args}, From, #{pid := Pid}) ->
+at_rest({Verb, true, HandleEvent, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(Verb, Pid, Args),
     CleanState = clean_state(),
-    NewState =
-        case IsAsync of
-            true ->
-                gen_fsm:reply(From, StreamRef),
-                CleanState#{
+    NewState = CleanState#{
                   pid => Pid,
                   stream => StreamRef,
-                  handle_event => HandleEvent
-                 };
-            _ ->
-                CleanState#{
-                  pid => Pid,
-                  stream => StreamRef,
-                  from => From
-                 }
-        end,
+                  handle_event => HandleEvent,
+                  async => true
+                },
+    gen_fsm:reply(From, StreamRef),
+    {next_state, wait_response, NewState};
+at_rest({Verb, false, _HandleEvent, Args}, From, #{pid := Pid}) ->
+    StreamRef = do_http_verb(Verb, Pid, Args),
+    CleanState = clean_state(),
+    NewState = CleanState#{
+                 pid => Pid,
+                 stream => StreamRef,
+                 from => From
+                },
     {next_state, wait_response, NewState}.
-
--spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
-do_http_verb(get, Pid, {Url, Headers}) ->
-    gun:get(Pid, Url, Headers);
-do_http_verb(post, Pid, {Url, Headers, Body}) ->
-    gun:post(Pid, Url, Headers, Body);
-do_http_verb(delete, Pid, {Url, Headers}) ->
-    gun:delete(Pid, Url, Headers);
-do_http_verb(head, Pid, {Url, Headers}) ->
-    gun:head(Pid, Url, Headers);
-do_http_verb(options, Pid, {Url, Headers}) ->
-    gun:options(Pid, Url, Headers);
-do_http_verb(patch, Pid, {Url, Headers, Body}) ->
-    gun:patch(Pid, Url, Headers, Body);
-do_http_verb(put, Pid, {Url, Headers, Body}) ->
-    gun:put(Pid, Url, Headers, Body).
 
 -spec wait_response(term(), term()) -> term().
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
     exit(Reason);
 wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
-              #{from := From} = State) ->
-    gen_fsm:reply(From, #{status_code => StatusCode, headers => Headers}),
+              #{from := From, async := Async} = State) ->
+    case Async of
+        false ->
+            Response = #{status_code => StatusCode, headers => Headers},
+            gen_fsm:reply(From, Response);
+        true -> ok
+    end,
     {next_state, at_rest, State};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               State) ->
@@ -288,14 +277,16 @@ receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clean_state() ->
-    #{pid => undefined,
-      stream => undefined,
-      handle_event => undefined,
-      from => undefined,
-      responses => queue:new(),
-      data => <<"">>,
-      status_code => undefined,
-      headers => undefined
+    #{
+       pid => undefined,
+       stream => undefined,
+       handle_event => undefined,
+       from => undefined,
+       responses => queue:new(),
+       data => <<"">>,
+       status_code => undefined,
+       headers => undefined,
+       async => false
      }.
 
 maps_get(Key, Map, Default) ->
@@ -305,6 +296,22 @@ maps_get(Key, Map, Default) ->
         false ->
             Default
     end.
+
+-spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
+do_http_verb(get, Pid, {Url, Headers}) ->
+    gun:get(Pid, Url, Headers);
+do_http_verb(post, Pid, {Url, Headers, Body}) ->
+    gun:post(Pid, Url, Headers, Body);
+do_http_verb(delete, Pid, {Url, Headers}) ->
+    gun:delete(Pid, Url, Headers);
+do_http_verb(head, Pid, {Url, Headers}) ->
+    gun:head(Pid, Url, Headers);
+do_http_verb(options, Pid, {Url, Headers}) ->
+    gun:options(Pid, Url, Headers);
+do_http_verb(patch, Pid, {Url, Headers, Body}) ->
+    gun:patch(Pid, Url, Headers, Body);
+do_http_verb(put, Pid, {Url, Headers, Body}) ->
+    gun:put(Pid, Url, Headers, Body).
 
 manage_chunk(IsFin, undefined, StreamRef, Data, Responses, State) ->
     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses),
