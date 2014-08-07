@@ -9,9 +9,23 @@
          start_link/2,
          open/2,
          close/1,
+         %% get
          get/2,
          get/3,
          get/4,
+         %% post
+         post/5,
+         %% delete
+         delete/4,
+         %% head
+         head/4,
+         %% options
+         options/4,
+         %% patch
+         patch/5,
+         %% put
+         put/5,
+         %% events
          events/1
         ]).
 
@@ -31,9 +45,15 @@
          receive_chunk/2
         ]).
 
--type response() :: #{}.
+-type response() :: #{} | reference().
 -type headers() :: #{}.
--type options() :: [].
+-type options() ::
+        #{
+           async => boolean(),
+           handle_event => function(),
+           basic_auth => {string(), string()}
+         }.
+-type http_verb() :: get | post | head | delete | patch | put | options.
 
 -spec start() -> {ok, [atom()]}.
 start() ->
@@ -60,6 +80,7 @@ close(Pid) ->
     gen_fsm:send_all_state_event(Pid, 'shutdown'),
     ok.
 
+%% GET
 -spec get(pid(), string()) -> response().
 get(Pid, Url) ->
     get(Pid, Url, #{}, #{}).
@@ -69,23 +90,57 @@ get(Pid, Url, Headers) ->
     get(Pid, Url, Headers, #{}).
 
 -spec get(pid(), string(), headers(), options()) -> response().
-get(Pid, Url, HeadersMap, Options) ->
-    Headers = basic_auth_header(Options, maps:to_list(HeadersMap)),
+get(Pid, Url, Headers0, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {get, IsAsync, HandleEvent, {Url, Headers}},
+    gen_fsm:sync_send_event(Pid, Event).
 
-    HandleEvent = maps_get(handle_event, Options, undefined),
-    Async = maps_get(async, Options, undefined),
-    case {HandleEvent, Async} of
-        {undefined, undefined} ->
-            gen_fsm:sync_send_event(Pid, {get, Url, Headers});
-        {undefined, Async} ->
-            gen_fsm:sync_send_event(Pid, {asyncget, Url, Headers});
-        _ ->
-            gen_fsm:sync_send_event(Pid, {asyncget, Url, Headers, HandleEvent})
-    end.
+%% POST
+-spec post(pid(), string(), headers(), iodata(), options()) -> response().
+post(Pid, Url, Headers0, Body, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {post, IsAsync, HandleEvent, {Url, Headers, Body}},
+    gen_fsm:sync_send_event(Pid, Event).
 
+%% DELETE
+-spec delete(pid(), string(), headers(), options()) -> response().
+delete(Pid, Url, Headers0, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {delete, IsAsync, HandleEvent, {Url, Headers}},
+    gen_fsm:sync_send_event(Pid, Event).
+
+%% HEAD
+-spec head(pid(), string(), headers(), options()) -> response().
+head(Pid, Url, Headers0, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {head, IsAsync, HandleEvent, {Url, Headers}},
+    gen_fsm:sync_send_event(Pid, Event).
+
+%% OPTIONS
+-spec options(pid(), string(), headers(), options()) -> response().
+options(Pid, Url, Headers0, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {options, IsAsync, HandleEvent, {Url, Headers}},
+    gen_fsm:sync_send_event(Pid, Event).
+
+%% PATCH
+-spec patch(pid(), string(), headers(), iodata(), options()) -> response().
+patch(Pid, Url, Headers0, Body, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {patch, IsAsync, HandleEvent, {Url, Headers, Body}},
+    gen_fsm:sync_send_event(Pid, Event).
+
+%% PUT
+-spec put(pid(), string(), headers(), iodata(), options()) -> response().
+put(Pid, Url, Headers0, Body, Options) ->
+    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0),
+    Event = {put, IsAsync, HandleEvent, {Url, Headers, Body}},
+    gen_fsm:sync_send_event(Pid, Event).
+
+%% @doc Returns a list of all received events up to now.
 -spec events(Pid :: pid()) -> [{nofin | fin, reference(), binary()}].
 events(Pid) ->
-    gen_fsm:sync_send_all_state_event(Pid, get_response).
+    gen_fsm:sync_send_all_state_event(Pid, get_events).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_fsm callbacks
@@ -108,7 +163,7 @@ handle_event(shutdown, _StateName, StateData) ->
 
 -spec handle_sync_event(term(), {pid(), term()}, atom(), term()) ->
     term().
-handle_sync_event(get_response,
+handle_sync_event(get_events,
                   _From,
                   StateName,
                   #{responses := Responses} = State) ->
@@ -134,29 +189,42 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec at_rest(term(), pid(), term()) -> term().
-at_rest({asyncget, Url, Headers}, From, #{pid := Pid} = _State) ->
-    StreamRef = gun:get(Pid, Url, Headers),
-    gen_fsm:reply(From, StreamRef),
-    NewState = clean_state(),
-    {next_state, wait_response, NewState#{pid := Pid, stream := StreamRef}};
-at_rest({asyncget, Url, Headers, HandleEvent}, From, #{pid := Pid} = _State) ->
-    StreamRef = gun:get(Pid, Url, Headers),
-    gen_fsm:reply(From, StreamRef),
-    NewState = clean_state(),
-    {
-      next_state,
-      wait_response,
-      NewState#{pid := Pid, stream := StreamRef, handle_event := HandleEvent}
-    };
-at_rest({get, Url, Headers}, From, #{pid := Pid} = _State) ->
-    StreamRef = gun:get(Pid, Url, Headers),
+at_rest({Verb, IsAsync, HandleEvent, Args}, From, #{pid := Pid}) ->
+    StreamRef = do_http_verb(Verb, Pid, Args),
+    CleanState = clean_state(),
+    NewState =
+        case IsAsync of
+            true ->
+                gen_fsm:reply(From, StreamRef),
+                CleanState#{
+                  pid => Pid,
+                  stream => StreamRef,
+                  handle_event => HandleEvent
+                 };
+            _ ->
+                CleanState#{
+                  pid => Pid,
+                  stream => StreamRef,
+                  from => From
+                 }
+        end,
+    {next_state, wait_response, NewState}.
 
-    NewState = clean_state(),
-    {
-      next_state,
-      wait_response,
-      NewState#{pid := Pid, stream := StreamRef, from := From}
-    }.
+-spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
+do_http_verb(get, Pid, {Url, Headers}) ->
+    gun:get(Pid, Url, Headers);
+do_http_verb(post, Pid, {Url, Headers, Body}) ->
+    gun:post(Pid, Url, Headers, Body);
+do_http_verb(delete, Pid, {Url, Headers}) ->
+    gun:delete(Pid, Url, Headers);
+do_http_verb(head, Pid, {Url, Headers}) ->
+    gun:head(Pid, Url, Headers);
+do_http_verb(options, Pid, {Url, Headers}) ->
+    gun:options(Pid, Url, Headers);
+do_http_verb(patch, Pid, {Url, Headers, Body}) ->
+    gun:patch(Pid, Url, Headers, Body);
+do_http_verb(put, Pid, {Url, Headers, Body}) ->
+    gun:put(Pid, Url, Headers, Body).
 
 -spec wait_response(term(), term()) -> term().
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
@@ -244,6 +312,13 @@ manage_chunk(IsFin, undefined, StreamRef, Data, Responses, State) ->
 manage_chunk(IsFin, HandleEvent, StreamRef, Data, _Responses, State) ->
     HandleEvent(IsFin, StreamRef, Data),
     {next_state, receive_chunk, State}.
+
+process_options(Options, HeadersMap) ->
+    Headers = basic_auth_header(Options, maps:to_list(HeadersMap)),
+    HandleEvent = maps_get(handle_event, Options, undefined),
+    Async = maps_get(async, Options, false),
+
+    {HandleEvent, Async, Headers}.
 
 basic_auth_header(Options, Headers) ->
     case maps_get(basic_auth, Options, undefined) of
