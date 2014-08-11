@@ -379,7 +379,7 @@ basic_auth_header(Options, Headers) ->
             Headers;
         {User, Password} ->
             Base64 = encode_basic_auth(User, Password),
-            BasicAuth = {<<"Authorization">>, <<"Basic", Base64/binary>>},
+            BasicAuth = {<<"Authorization">>, <<"Basic ", Base64/binary>>},
             [BasicAuth | Headers]
     end.
 
