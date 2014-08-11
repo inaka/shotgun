@@ -363,7 +363,7 @@ manage_chunk(IsFin, HandleEvent, StreamRef, Data, _Responses, State) ->
     {next_state, receive_chunk, State}.
 
 process_options(Options, HeadersMap, HttpVerb) ->
-    Headers = basic_auth_header(Options, maps:to_list(HeadersMap)),
+    Headers = basic_auth_header(HeadersMap),
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, false),
     case {Async, HttpVerb} of
@@ -373,14 +373,16 @@ process_options(Options, HeadersMap, HttpVerb) ->
     end,
     {HandleEvent, Async, Headers}.
 
-basic_auth_header(Options, Headers) ->
-    case maps_get(basic_auth, Options, undefined) of
+basic_auth_header(Headers) ->
+    case maps_get(basic_auth, Headers, undefined) of
         undefined ->
-            Headers;
+            maps:to_list(Headers);
         {User, Password} ->
+            HeadersClean = maps:remove(basic_auth, Headers),
+            HeadersList = maps:to_list(HeadersClean),
             Base64 = encode_basic_auth(User, Password),
             BasicAuth = {<<"Authorization">>, <<"Basic ", Base64/binary>>},
-            [BasicAuth | Headers]
+            [BasicAuth | HeadersList]
     end.
 
 encode_basic_auth([], []) ->
