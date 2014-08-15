@@ -1,6 +1,6 @@
 {application, shotgun,
  [
-  {dessription,
+  {description,
    "better than just a gun"},
   {vsn, "0.1"},
   {applications,
@@ -9,6 +9,8 @@
      lager,
      gun
     ]},
-  {mod, {shotgun_app, []}}
+  {mod, {shotgun_app, []}},
+  {modules, []},
+  {registered, []}
  ]
 }.
