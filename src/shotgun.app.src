@@ -1,6 +1,6 @@
 {application, shotgun,
  [
-  {dessription,
+  {description,
    "better than just a gun"},
   {vsn, "0.1"},
   {applications,
