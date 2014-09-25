@@ -57,6 +57,7 @@
 -type options() ::
         #{
            async => boolean(),
+           async_data => binary | sse,
            handle_event => function(),
            basic_auth => {string(), string()}
          }.
@@ -98,10 +99,14 @@ get(Pid, Url, Headers) ->
 
 -spec get(pid(), string(), headers(), options()) -> result().
 get(Pid, Url, Headers0, Options) ->
-    {HandleEvent, IsAsync, Headers} = process_options(Options, Headers0, get),
+    #{handle_event := HandleEvent,
+      async := IsAsync,
+      async_mode := AsyncMode,
+      headers := Headers} = process_options(Options, Headers0, get),
+
     Event = case IsAsync of
                 true ->
-                    {get_async, HandleEvent, {Url, Headers}};
+                    {get_async, {HandleEvent, AsyncMode}, {Url, Headers}};
                 false ->
                     {get, {Url, Headers}}
            end,
@@ -112,7 +117,8 @@ get(Pid, Url, Headers0, Options) ->
 -spec post(pid(), string(), headers(), iodata(), options()) -> result().
 post(Pid, Url, Headers0, Body, Options) ->
     try
-        {HandleEvent, _, Headers} = process_options(Options, Headers0, post),
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, post),
         Event = {post, {Url, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
@@ -124,7 +130,8 @@ post(Pid, Url, Headers0, Body, Options) ->
 -spec delete(pid(), string(), headers(), options()) -> result().
 delete(Pid, Url, Headers0, Options) ->
     try
-        {HandleEvent, _, Headers} = process_options(Options, Headers0, delete),
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, delete),
         Event = {delete, {Url, Headers}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
@@ -136,7 +143,8 @@ delete(Pid, Url, Headers0, Options) ->
 -spec head(pid(), string(), headers(), options()) -> result().
 head(Pid, Url, Headers0, Options) ->
     try
-        {HandleEvent, _, Headers} = process_options(Options, Headers0, head),
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, head),
         Event = {head, {Url, Headers}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
@@ -148,7 +156,8 @@ head(Pid, Url, Headers0, Options) ->
 -spec options(pid(), string(), headers(), options()) -> result().
 options(Pid, Url, Headers0, Options) ->
     try
-        {HandleEvent, _, Headers} = process_options(Options, Headers0, options),
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, options),
         Event = {options, {Url, Headers}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
@@ -160,7 +169,8 @@ options(Pid, Url, Headers0, Options) ->
 -spec patch(pid(), string(), headers(), iodata(), options()) -> result().
 patch(Pid, Url, Headers0, Body, Options) ->
     try
-        {HandleEvent, _, Headers} = process_options(Options, Headers0, patch),
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, patch),
         Event = {patch, {Url, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
@@ -172,7 +182,8 @@ patch(Pid, Url, Headers0, Body, Options) ->
 -spec put(pid(), string(), headers(), iodata(), options()) -> result().
 put(Pid, Url, Headers0, Body, Options) ->
     try
-        {HandleEvent, _, Headers} = process_options(Options, Headers0, put),
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, put),
         Event = {put, {Url, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
@@ -232,14 +243,15 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec at_rest(term(), pid(), term()) -> term().
-at_rest({get_async, HandleEvent, Args}, From, #{pid := Pid}) ->
+at_rest({get_async, {HandleEvent, AsyncMode}, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
     CleanState = clean_state(),
     NewState = CleanState#{
-                  pid => Pid,
-                  stream => StreamRef,
-                  handle_event => HandleEvent,
-                  async => true
+                 pid => Pid,
+                 stream => StreamRef,
+                 handle_event => HandleEvent,
+                 async => true,
+                 async_mode => AsyncMode
                 },
     gen_fsm:reply(From, StreamRef),
     {next_state, wait_response, NewState};
@@ -306,31 +318,26 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 -spec receive_chunk(term(), term()) -> term().
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
-receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data},
-              #{
-                handle_event := HandleEvent,
-                buffer := Buffer
-               } = State) ->
-    NewBuffer = <<Buffer/binary, Data/binary>>,
-    DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
-
-    case lists:reverse(DataList) of
-        [_] ->
-            {next_state, receive_chunk, State#{buffer := NewBuffer}};
-        [Last | Start] ->
-            lists:foreach(
-              fun(Event) ->
-                      HandleEvent(IsFin, StreamRef, Event)
-              end, Start),
-            case Last of
-                <<>> ->
-                    {next_state, receive_chunk, State#{buffer := <<"">>}};
-                _ ->
-                    {next_state, receive_chunk, State#{buffer := Last}}
-            end
-    end;
+receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data}, State) ->
+    manage_chunk(IsFin, StreamRef, Data, State);
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
+
+-spec parse_event(binary()) ->
+    {Data :: binary(), Id :: binary(), EventName :: binary()}.
+parse_event(EventBin) ->
+    Lines = binary:split(EventBin, <<"\n">>, [global]),
+    FoldFun = fun(Line, #{data := DataList} = Event) ->
+                  case Line of
+                      <<"data: ", Data/binary>> ->
+                          Event#{ data => [Data | DataList]};
+                      <<"id: ", Id/binary>> ->
+                          Event#{id => Id};
+                      <<"event: ", EventName/binary>> ->
+                          Event#{event => EventName}
+                  end
+          end,
+    lists:foldr(FoldFun, #{data => []}, Lines).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private
@@ -346,7 +353,9 @@ clean_state() ->
        data => <<"">>,
        status_code => undefined,
        headers => undefined,
-       async => false
+       async => false,
+       chunk_mode => binary,
+       buffer => <<"">>
      }.
 
 maps_get(Key, Map, Default) ->
@@ -373,23 +382,50 @@ do_http_verb(patch, Pid, {Url, Headers, Body}) ->
 do_http_verb(put, Pid, {Url, Headers, Body}) ->
     gun:put(Pid, Url, Headers, Body).
 
-manage_chunk(IsFin, undefined, StreamRef, Data, Responses, State) ->
+manage_chunk(IsFin, StreamRef, Data,
+             State = #{handle_event := undefined,
+                       responses := Responses,
+                       async_mode := binary}) ->
     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses),
     {next_state, receive_chunk, State#{responses => NewResponses}};
-manage_chunk(IsFin, HandleEvent, StreamRef, Data, _Responses, State) ->
+manage_chunk(IsFin, StreamRef, Data,
+             State = #{handle_event := undefined,
+                       responses := Responses,
+                       async_mode := sse}) ->
+    {Events, NewState} = sse_events(Data, State),
+    FunAdd = fun(Event, Acc) ->
+                 queue:in({IsFin, StreamRef, Event}, Acc)
+             end,
+    NewResponses = lists:foldl(FunAdd, Responses, Events),
+    {next_state, receive_chunk, NewState#{responses => NewResponses}};
+manage_chunk(IsFin, StreamRef, Data,
+             State = #{handle_event := HandleEvent,
+                       async_mode := binary}) ->
     HandleEvent(IsFin, StreamRef, Data),
-    {next_state, receive_chunk, State}.
+    {next_state, receive_chunk, State};
+manage_chunk(IsFin, StreamRef, Data,
+             State = #{handle_event := HandleEvent,
+                       async_mode := sse}) ->
+    {Events, NewState} = sse_events(Data, State),
+    Fun = fun (Event) -> HandleEvent(IsFin, StreamRef, Event) end,
+    lists:foreach(Fun, Events),
+
+    {next_state, receive_chunk, NewState}.
 
 process_options(Options, HeadersMap, HttpVerb) ->
     Headers = basic_auth_header(HeadersMap),
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, false),
+    AsyncMode = maps_get(async_mode, Options, binary),
     case {Async, HttpVerb} of
         {true, get} -> ok;
         {true, Other} -> throw({async_unsupported, Other});
         _ -> ok
     end,
-    {HandleEvent, Async, Headers}.
+    #{handle_event => HandleEvent,
+      async => Async,
+      async_mode => AsyncMode,
+      headers => Headers}.
 
 basic_auth_header(Headers) ->
     case maps_get(basic_auth, Headers, undefined) of
@@ -408,18 +444,14 @@ encode_basic_auth([], []) ->
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
-parse_event(Event) ->
-    Lines = binary:split(Event, <<"\n">>, [global]),
-    FoldFun = fun(Line, {DataList, Id, EventName}) ->
-                  case Line of
-                      <<"data: ", Data/binary>> ->
-                          {[Data | DataList], Id, EventName};
-                      <<"id: ", NewId/binary>> ->
-                          {DataList, NewId, EventName};
-                      <<"event: ", NewEventName/binary>> ->
-                          {DataList, Id, NewEventName}
-                  end
-          end,
-    lists:foldr(FoldFun, {[], undefined, undefined}, Lines).
-
-%%     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses)
+sse_events(Data, State = #{buffer := Buffer}) ->
+    NewBuffer = <<Buffer/binary, Data/binary>>,
+    DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
+    case lists:reverse(DataList) of
+        [_] ->
+            {[], State#{buffer := NewBuffer}};
+        [<<>> | Events] ->
+            {lists:reverse(Events), State#{buffer := <<"">>}};
+        [Rest | Events] ->
+            {lists:reverse(Events), State#{buffer := Rest}}
+    end.

@@ -14,6 +14,6 @@ RUN := erl -pa ebin -pa deps/*/ebin -smp enable -s sync -boot start_sasl ${ERL_A
 NODE ?= ${PROJECT}
 
 shell: app
-	if [ -n "${NODE}" ]; then ${RUN} -name ${NODE}@`hostname` -s ${PROJECT} -config rel/sys.config; \
+	if [ -n "${NODE}" ]; then ${RUN} -name ${NODE}@`hostname` -s ${PROJECT} -s sync -config rel/sys.config; \
 	else ${RUN} -s ${PROJECT} -config rel/sys.config; \
 	fi
