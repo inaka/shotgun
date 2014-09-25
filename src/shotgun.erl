@@ -214,16 +214,16 @@ maps_get(Key, Map, Default) ->
 
 parse_event(Event) ->
     Lines = binary:split(Event, <<"\n">>, [global]),
-    lists:foldr(
-      fun(Line, {DataList, _, _} = Result) ->
-              case Line of
-                  <<"data: ", Data/binary>> ->
-                      { };
-                  <<"id: ", Id/binary>> ->
-                      
-                  <<"event: ", Event/binary>> ->
-                      Event;
-              end
-      end, {[], undefined, undefined}, Lines).
+    FoldFun = fun(Line, {DataList, Id, EventName}) ->
+                  case Line of
+                      <<"data: ", Data/binary>> ->
+                          {[Data | DataList], Id, EventName};
+                      <<"id: ", NewId/binary>> ->
+                          {DataList, NewId, EventName};
+                      <<"event: ", NewEventName/binary>> ->
+                          {DataList, Id, NewEventName}
+                  end
+          end,
+    lists:foldr(FoldFun, {[], undefined, undefined}, Lines).
 
-%%     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses)    
+%%     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses)
