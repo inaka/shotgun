@@ -269,14 +269,19 @@ at_rest({HttpVerb, Args}, From, #{pid := Pid}) ->
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
     exit(Reason);
 wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
-              #{from := From, async := Async} = State) ->
-    case Async of
-        false ->
-            Response = #{status_code => StatusCode, headers => Headers},
-            gen_fsm:reply(From, Response);
-        true -> ok
-    end,
-    {next_state, at_rest, State};
+              #{from := From,
+                async := Async,
+                responses := Responses} = State) ->
+    Response = #{status_code => StatusCode, headers => Headers},
+    NewResponses =
+        case Async of
+            false ->
+                gen_fsm:reply(From, Response),
+                Responses;
+            true ->
+                queue:in(Response, Responses)
+        end,
+    {next_state, at_rest, State#{responses => NewResponses}};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               State) ->
     StateName = case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
