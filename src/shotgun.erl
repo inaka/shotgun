@@ -25,6 +25,8 @@
          patch/5,
          %% put
          put/5,
+         %% generic request
+         request/6,
          %% events
          events/1
         ]).
@@ -106,9 +108,9 @@ get(Pid, Url, Headers0, Options) ->
 
     Event = case IsAsync of
                 true ->
-                    {get_async, {HandleEvent, AsyncMode}, {Url, Headers}};
+                    {get_async, {HandleEvent, AsyncMode}, {Url, Headers, []}};
                 false ->
-                    {get, {Url, Headers}}
+                    {get, {Url, Headers, []}}
            end,
     StreamRef = gen_fsm:sync_send_event(Pid, Event),
     {ok, StreamRef}.
@@ -132,7 +134,7 @@ delete(Pid, Url, Headers0, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, delete),
-        Event = {delete, {Url, Headers}},
+        Event = {delete, {Url, Headers, []}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
@@ -145,7 +147,7 @@ head(Pid, Url, Headers0, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, head),
-        Event = {head, {Url, Headers}},
+        Event = {head, {Url, Headers, []}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
@@ -158,7 +160,7 @@ options(Pid, Url, Headers0, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, options),
-        Event = {options, {Url, Headers}},
+        Event = {options, {Url, Headers, []}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
@@ -187,6 +189,20 @@ put(Pid, Url, Headers0, Body, Options) ->
         Event = {put, {Url, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
+    catch
+        _:Reason -> {error, Reason}
+    end.
+
+
+-spec request(pid(), http_verb(), string(), headers(), iodata(), options()) ->
+    result().
+request(Pid, Method, Uri, Headers0, Body, Options) ->
+    try
+        #{handle_event := HandleEvent,
+          headers := Headers} = process_options(Options, Headers0, Method),
+        Event = {Method, {Uri, Headers, Body}},
+        Response = gen_fsm:sync_send_event(Pid, Event),
+        {ok, Response}
     catch
         _:Reason -> {error, Reason}
     end.
@@ -372,20 +388,10 @@ maps_get(Key, Map, Default) ->
     end.
 
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
-do_http_verb(get, Pid, {Url, Headers}) ->
-    gun:get(Pid, Url, Headers);
-do_http_verb(post, Pid, {Url, Headers, Body}) ->
-    gun:post(Pid, Url, Headers, Body);
-do_http_verb(delete, Pid, {Url, Headers}) ->
-    gun:delete(Pid, Url, Headers);
-do_http_verb(head, Pid, {Url, Headers}) ->
-    gun:head(Pid, Url, Headers);
-do_http_verb(options, Pid, {Url, Headers}) ->
-    gun:options(Pid, Url, Headers);
-do_http_verb(patch, Pid, {Url, Headers, Body}) ->
-    gun:patch(Pid, Url, Headers, Body);
-do_http_verb(put, Pid, {Url, Headers, Body}) ->
-    gun:put(Pid, Url, Headers, Body).
+do_http_verb(Method, Pid, {Uri, Headers, Body}) ->
+    MethodStr = string:to_upper(atom_to_list(Method)),
+    MethodBin = list_to_binary(MethodStr),
+    gun:request(Pid, MethodBin, Uri, Headers, Body).
 
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := undefined,
