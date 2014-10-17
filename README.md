@@ -100,9 +100,9 @@ how the data received will be processed. `binary` mode treats eat chunk received
 as raw binary. `sse` mode buffers each chunk, splitting the data received into
 SSE. Default value is `binary`.
 
-- `handle_event :: fun((fin | nofin, ref(), binary()))`: this function will be
-called each time either a chunk is received (`async_data` = `binary`) or
-the an event is parsed (`async_data` = `sse`). If no handle_event function is
+- `handle_event :: fun((fin | nofin, ref(), binary()) -> any())`: this function
+will be called each time either a chunk is received (`async_data` = `binary`) or
+an event is parsed (`async_data` = `sse`). If no handle_event function is
 provided the data received is added to a queue, whose values can be obtained
 calling the `shotgun:events/1`. Default value is `undefined`.
 
