@@ -113,7 +113,7 @@ Options = #{async => true, async_mode => sse}},
 %= {ok,#Ref<0.0.1.186238>}
 
 % Some event are generated on the server...
-shotgun:events(Conn).
+Events = shotgun:events(Conn).
 %= [{nofin, #Ref<0.0.1.186238>, <<"data: pong">>}, {nofin, #Ref<0.0.1.186238>, <<"data: pong">>}]
 
 shotgun:events(Conn).
@@ -125,6 +125,14 @@ because events are stored in a queue and each call to `events` returns all
 events queued so far and then removes these from the queue. So it's important
 to understand that `shotgun:events/1` is a function with side-effects when using
 it.
+
+Additionally **shotgun** provides a `parse_event/1` helper function that
+turns a server-sent event binary into a map:
+
+```erlang
+shotgun:parse_event(<<"data: pong\ndata: ping\nid: 1\nevent: pinging">>).
+%= #{data => [<<"pong">>,<<"ping">>],event => <<"pinging">>,id => <<"1">>}
+```
 
 ## Building & Test-Driving
 
