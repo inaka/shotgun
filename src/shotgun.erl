@@ -195,7 +195,8 @@ head(Pid, Uri, Headers0, Options) ->
         _:Reason -> {error, Reason}
     end.
 
-%% OPTIONS
+%% @doc Perform a <strong>OPTIONS</strong> request to <code>Uri</code> using
+%% <code>Headers</code>.
 -spec options(pid(), string(), headers(), options()) -> result().
 options(Pid, Uri, Headers0, Options) ->
     try
