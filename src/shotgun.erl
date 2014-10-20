@@ -1,10 +1,11 @@
 %%% @author Federico Carrone <federico@inaka.net>
 %%% @author Juan Facorro <juan@inaka.net>
-%%% @doc Shotgun main interface.
-%%%      Use functions provided in this module to open a connection and make
+%%% @doc Shotgun's main interface.
+%%%      Use the functions provided in this module to open a connection and make
 %%%      requests.
 -module(shotgun).
--author(pyotrgalois).
+-author("federico@inaka.net").
+-author("juan@inaka.net").
 
 -behavior(gen_fsm).
 
@@ -111,7 +112,7 @@ get(Pid, Uri) ->
 get(Pid, Uri, Headers) ->
     get(Pid, Uri, Headers, #{}).
 
-%% @doc Perform a <strong>GET</strong> request to <code>Uri</code> using
+%% @doc Performs a <strong>GET</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 %% Available options are: <br/>
 %% <ul>
@@ -153,7 +154,7 @@ get(Pid, Uri, Headers0, Options) ->
     StreamRef = gen_fsm:sync_send_event(Pid, Event),
     {ok, StreamRef}.
 
-%% @doc Perform a <strong>POST</strong> request to <code>Uri</code> using
+%% @doc Performs a <strong>POST</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec post(pid(), string(), headers(), iodata(), options()) -> result().
 post(Pid, Uri, Headers0, Body, Options) ->
@@ -167,7 +168,7 @@ post(Pid, Uri, Headers0, Body, Options) ->
         _:Reason -> {error, Reason}
     end.
 
-%% @doc Perform a <strong>DELETE</strong> request to <code>Uri</code> using
+%% @doc Performs a <strong>DELETE</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 -spec delete(pid(), string(), headers(), options()) -> result().
 delete(Pid, Uri, Headers0, Options) ->
@@ -181,7 +182,7 @@ delete(Pid, Uri, Headers0, Options) ->
         _:Reason -> {error, Reason}
     end.
 
-%% @doc Perform a <strong>HEAD</strong> request to <code>Uri</code> using
+%% @doc Performs a <strong>HEAD</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 -spec head(pid(), string(), headers(), options()) -> result().
 head(Pid, Uri, Headers0, Options) ->
@@ -193,9 +194,9 @@ head(Pid, Uri, Headers0, Options) ->
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
-    end.
 
-%% @doc Perform a <strong>OPTIONS</strong> request to <code>Uri</code> using
+    end.
+%% @doc Performs a <strong>OPTIONS</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 -spec options(pid(), string(), headers(), options()) -> result().
 options(Pid, Uri, Headers0, Options) ->
@@ -209,7 +210,7 @@ options(Pid, Uri, Headers0, Options) ->
         _:Reason -> {error, Reason}
     end.
 
-%% @doc Perform a <strong>PATCH</strong> request to <code>Uri</code> using
+%% @doc Performs a <strong>PATCH</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec patch(pid(), string(), headers(), iodata(), options()) -> result().
 patch(Pid, Uri, Headers0, Body, Options) ->
@@ -223,7 +224,7 @@ patch(Pid, Uri, Headers0, Body, Options) ->
         _:Reason -> {error, Reason}
     end.
 
-%% @doc Perform a <strong>PUT</strong> request to <code>Uri</code> using
+%% @doc Performs a <strong>PUT</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec put(pid(), string(), headers(), iodata(), options()) -> result().
 put(Pid, Uri, Headers0, Body, Options) ->
@@ -237,7 +238,7 @@ put(Pid, Uri, Headers0, Body, Options) ->
         _:Reason -> {error, Reason}
     end.
 
-%% @doc Perform a request to <code>Uri</code> using the HTTP method
+%% @doc Performs a request to <code>Uri</code> using the HTTP method
 %% specified by <code>Method</code>,  <code>Body</code> as the content data and
 %% <code>Headers</code> as the request's headers.
 -spec request(pid(), http_verb(), string(), headers(), iodata(), options()) ->

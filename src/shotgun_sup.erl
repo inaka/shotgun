@@ -1,3 +1,4 @@
+%% @hidden
 -module(shotgun_sup).
 -author(pyotrgalois).
 
