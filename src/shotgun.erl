@@ -1,5 +1,11 @@
+%%% @author Federico Carrone <federico@inaka.net>
+%%% @author Juan Facorro <juan@inaka.net>
+%%% @doc Shotgun's main interface.
+%%%      Use the functions provided in this module to open a connection and make
+%%%      requests.
 -module(shotgun).
--author(pyotrgalois).
+-author("federico@inaka.net").
+-author("juan@inaka.net").
 
 -behavior(gen_fsm).
 
@@ -60,47 +66,80 @@
         #{
            async => boolean(),
            async_data => binary | sse,
-           handle_event => function(),
+           handle_event => fun((fin | nofin, reference(), binary()) -> any()),
            basic_auth => {string(), string()}
          }.
 -type http_verb() :: get | post | head | delete | patch | put | options.
 
+
+%% @doc Starts the application and all the ones it depends on.
 -spec start() -> {ok, [atom()]}.
 start() ->
     {ok, _} = application:ensure_all_started(shotgun).
 
+%% @doc Stops the application
 -spec stop() -> ok | {error, term()}.
 stop() ->
     application:stop(shotgun).
+
+%% @private
+-spec start_link(string(), integer()) -> {ok, pid()} | ignore | {error, term()}.
+start_link(Host, Port) ->
+    gen_fsm:start(shotgun, [Host, Port], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec start_link(string(), integer()) -> {ok, pid()} | ignore | {error, term()}.
-start_link(Host, Port) ->
-    gen_fsm:start(shotgun, [Host, Port], []).
-
+%% @doc Opens a connection with the host in the port specified.
 -spec open(Host :: string(), Port :: integer()) -> {ok, pid()}.
 open(Host, Port) ->
     supervisor:start_child(shotgun_sup, [Host, Port]).
 
+%% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
 close(Pid) ->
     gen_fsm:send_all_state_event(Pid, 'shutdown'),
     ok.
 
-%% GET
+%% @equiv get(Pid, Uri, #{}, #{})
 -spec get(pid(), string()) -> result().
-get(Pid, Url) ->
-    get(Pid, Url, #{}, #{}).
+get(Pid, Uri) ->
+    get(Pid, Uri, #{}, #{}).
 
+%% @equiv get(Pid, Uri, Headers, #{})
 -spec get(pid(), string(), headers()) -> result().
-get(Pid, Url, Headers) ->
-    get(Pid, Url, Headers, #{}).
+get(Pid, Uri, Headers) ->
+    get(Pid, Uri, Headers, #{}).
 
+%% @doc Performs a <strong>GET</strong> request to <code>Uri</code> using
+%% <code>Headers</code>.
+%% Available options are: <br/>
+%% <ul>
+%%   <li>
+%%     <code>async</code>:
+%%     specifies if the request performed will return a chunked response.
+%%     It currently only works for GET requests. Default value is false.
+%%   </li>
+%%   <li>
+%%     <code>async_data</code>:
+%%     when async is true the mode specifies how the data received will be
+%%     processed. binary mode treats eat chunk received as raw binary. sse mode
+%%     buffers each chunk, splitting the data received into SSE. Default value
+%%     is binary.
+%%   </li>
+%%   <li>
+%%     <code>handle_event</code>:
+%%     this function will be called each time either a chunk is received
+%%     (<code>async_data = binary</code>) or an event is parsed
+%%     (<code>async_data = sse</code>). If no handle_event function is provided
+%%     the data received is added to a queue, whose values can be obtained
+%%     calling the <code>shotgun:events/1</code>. Default value is undefined.
+%%   </li>
+%% </ul>
+%% @end
 -spec get(pid(), string(), headers(), options()) -> result().
-get(Pid, Url, Headers0, Options) ->
+get(Pid, Uri, Headers0, Options) ->
     #{handle_event := HandleEvent,
       async := IsAsync,
       async_mode := AsyncMode,
@@ -108,92 +147,100 @@ get(Pid, Url, Headers0, Options) ->
 
     Event = case IsAsync of
                 true ->
-                    {get_async, {HandleEvent, AsyncMode}, {Url, Headers, []}};
+                    {get_async, {HandleEvent, AsyncMode}, {Uri, Headers, []}};
                 false ->
-                    {get, {Url, Headers, []}}
+                    {get, {Uri, Headers, []}}
            end,
     StreamRef = gen_fsm:sync_send_event(Pid, Event),
     {ok, StreamRef}.
 
-%% POST
+%% @doc Performs a <strong>POST</strong> request to <code>Uri</code> using
+%% <code>Headers</code> and <code>Body</code> as the content data.
 -spec post(pid(), string(), headers(), iodata(), options()) -> result().
-post(Pid, Url, Headers0, Body, Options) ->
+post(Pid, Uri, Headers0, Body, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, post),
-        Event = {post, {Url, Headers, Body}},
+        Event = {post, {Uri, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
     end.
 
-%% DELETE
+%% @doc Performs a <strong>DELETE</strong> request to <code>Uri</code> using
+%% <code>Headers</code>.
 -spec delete(pid(), string(), headers(), options()) -> result().
-delete(Pid, Url, Headers0, Options) ->
+delete(Pid, Uri, Headers0, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, delete),
-        Event = {delete, {Url, Headers, []}},
+        Event = {delete, {Uri, Headers, []}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
     end.
 
-%% HEAD
+%% @doc Performs a <strong>HEAD</strong> request to <code>Uri</code> using
+%% <code>Headers</code>.
 -spec head(pid(), string(), headers(), options()) -> result().
-head(Pid, Url, Headers0, Options) ->
+head(Pid, Uri, Headers0, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, head),
-        Event = {head, {Url, Headers, []}},
+        Event = {head, {Uri, Headers, []}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
-    end.
 
-%% OPTIONS
+    end.
+%% @doc Performs a <strong>OPTIONS</strong> request to <code>Uri</code> using
+%% <code>Headers</code>.
 -spec options(pid(), string(), headers(), options()) -> result().
-options(Pid, Url, Headers0, Options) ->
+options(Pid, Uri, Headers0, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, options),
-        Event = {options, {Url, Headers, []}},
+        Event = {options, {Uri, Headers, []}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
     end.
 
-%% PATCH
+%% @doc Performs a <strong>PATCH</strong> request to <code>Uri</code> using
+%% <code>Headers</code> and <code>Body</code> as the content data.
 -spec patch(pid(), string(), headers(), iodata(), options()) -> result().
-patch(Pid, Url, Headers0, Body, Options) ->
+patch(Pid, Uri, Headers0, Body, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, patch),
-        Event = {patch, {Url, Headers, Body}},
+        Event = {patch, {Uri, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
     end.
 
-%% PUT
+%% @doc Performs a <strong>PUT</strong> request to <code>Uri</code> using
+%% <code>Headers</code> and <code>Body</code> as the content data.
 -spec put(pid(), string(), headers(), iodata(), options()) -> result().
-put(Pid, Url, Headers0, Body, Options) ->
+put(Pid, Uri, Headers0, Body, Options) ->
     try
         #{handle_event := HandleEvent,
           headers := Headers} = process_options(Options, Headers0, put),
-        Event = {put, {Url, Headers, Body}},
+        Event = {put, {Uri, Headers, Body}},
         StreamRef = gen_fsm:sync_send_event(Pid, Event),
         {ok, StreamRef}
     catch
         _:Reason -> {error, Reason}
     end.
 
-
+%% @doc Performs a request to <code>Uri</code> using the HTTP method
+%% specified by <code>Method</code>,  <code>Body</code> as the content data and
+%% <code>Headers</code> as the request's headers.
 -spec request(pid(), http_verb(), string(), headers(), iodata(), options()) ->
     result().
 request(Pid, Method, Uri, Headers0, Body, Options) ->
@@ -212,10 +259,31 @@ request(Pid, Method, Uri, Headers0, Body, Options) ->
 events(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, get_events).
 
+%% @doc Parse an SSE event in binary format. For example the following binary
+%% <code>&lt;&lt;"data: some content\n"&gt;&gt;</code> will be turned into the
+%% following map <code>#{&lt;&lt;"data"&gt;&gt; =>
+%% &lt;&lt;"some content"&gt;&gt;}</code>.
+-spec parse_event(binary()) ->
+    {Data :: binary(), Id :: binary(), EventName :: binary()}.
+parse_event(EventBin) ->
+    Lines = binary:split(EventBin, <<"\n">>, [global]),
+    FoldFun = fun(Line, #{data := DataList} = Event) ->
+                  case Line of
+                      <<"data: ", Data/binary>> ->
+                          Event#{ data => [Data | DataList]};
+                      <<"id: ", Id/binary>> ->
+                          Event#{id => Id};
+                      <<"event: ", EventName/binary>> ->
+                          Event#{event => EventName}
+                  end
+          end,
+    lists:foldr(FoldFun, #{data => []}, Lines).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_fsm callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% @private
 -spec init([term()]) -> term().
 init([Host, Port]) ->
     Opts = [
@@ -227,10 +295,12 @@ init([Host, Port]) ->
     State = clean_state(),
     {ok, at_rest, State#{pid => Pid}}.
 
+%% @private
 -spec handle_event(term(), atom(), term()) -> term().
 handle_event(shutdown, _StateName, StateData) ->
     {stop, normal, StateData}.
 
+%% @private
 -spec handle_sync_event(term(), {pid(), term()}, atom(), term()) ->
     term().
 handle_sync_event(get_events,
@@ -240,15 +310,18 @@ handle_sync_event(get_events,
     Reply = queue:to_list(Responses),
     {reply, Reply, StateName, State#{responses := queue:new()}}.
 
+%% @private
 -spec handle_info(term(), atom(), term()) -> term().
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
     Module:StateName(Event, StateData).
 
+%% @private
 -spec code_change(term(), atom(), term(), term()) -> {ok, atom(), term()}.
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
+%% @private
 -spec terminate(term(), atom(), term()) -> ok.
 terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
     gun:shutdown(Pid),
@@ -258,6 +331,7 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %% gen_fsm states
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% @private
 -spec at_rest(term(), pid(), term()) -> term().
 at_rest({get_async, {HandleEvent, AsyncMode}, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
@@ -281,6 +355,7 @@ at_rest({HttpVerb, Args}, From, #{pid := Pid}) ->
                 },
     {next_state, wait_response, NewState}.
 
+%% @private
 -spec wait_response(term(), term()) -> term().
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
     exit(Reason);
@@ -314,7 +389,8 @@ wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
 wait_response(Event, State) ->
     {stop, {unexpected, Event}, State}.
 
-%% regular response
+%% @private
+%% @doc Regular response
 -spec receive_data(term(), term()) -> term().
 receive_data({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
@@ -335,7 +411,8 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = State) ->
     {next_state, at_rest, State}.
 
-%% chunked data response
+%% @private
+%% @doc Chunked data response
 -spec receive_chunk(term(), term()) -> term().
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
@@ -344,26 +421,11 @@ receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data}, State) ->
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
--spec parse_event(binary()) ->
-    {Data :: binary(), Id :: binary(), EventName :: binary()}.
-parse_event(EventBin) ->
-    Lines = binary:split(EventBin, <<"\n">>, [global]),
-    FoldFun = fun(Line, #{data := DataList} = Event) ->
-                  case Line of
-                      <<"data: ", Data/binary>> ->
-                          Event#{ data => [Data | DataList]};
-                      <<"id: ", Id/binary>> ->
-                          Event#{id => Id};
-                      <<"event: ", EventName/binary>> ->
-                          Event#{event => EventName}
-                  end
-          end,
-    lists:foldr(FoldFun, #{data => []}, Lines).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% @private
 clean_state() ->
     #{
        pid => undefined,
@@ -379,6 +441,7 @@ clean_state() ->
        buffer => <<"">>
      }.
 
+%% @private
 maps_get(Key, Map, Default) ->
     case maps:is_key(Key, Map) of
         true ->
@@ -387,12 +450,14 @@ maps_get(Key, Map, Default) ->
             Default
     end.
 
+%% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
 do_http_verb(Method, Pid, {Uri, Headers, Body}) ->
     MethodStr = string:to_upper(atom_to_list(Method)),
     MethodBin = list_to_binary(MethodStr),
     gun:request(Pid, MethodBin, Uri, Headers, Body).
 
+%% @private
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := undefined,
                        responses := Responses,
@@ -423,6 +488,7 @@ manage_chunk(IsFin, StreamRef, Data,
 
     {next_state, receive_chunk, NewState}.
 
+%% @private
 process_options(Options, HeadersMap, HttpVerb) ->
     Headers = basic_auth_header(HeadersMap),
     HandleEvent = maps_get(handle_event, Options, undefined),
@@ -438,6 +504,7 @@ process_options(Options, HeadersMap, HttpVerb) ->
       async_mode => AsyncMode,
       headers => Headers}.
 
+%% @private
 basic_auth_header(Headers) ->
     case maps_get(basic_auth, Headers, undefined) of
         undefined ->
@@ -450,11 +517,13 @@ basic_auth_header(Headers) ->
             [BasicAuth | HeadersList]
     end.
 
+%% @private
 encode_basic_auth([], []) ->
     [];
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
+%% @private
 sse_events(Data, State = #{buffer := Buffer}) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
     DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
