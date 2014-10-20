@@ -17,3 +17,6 @@ shell: app
 	if [ -n "${NODE}" ]; then ${RUN} -name ${NODE}@`hostname` -s ${PROJECT} -s sync -config rel/sys.config; \
 	else ${RUN} -s ${PROJECT} -config rel/sys.config; \
 	fi
+
+erldocs: all
+	erldocs . -o docs
