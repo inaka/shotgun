@@ -12,8 +12,9 @@
 -export([
          start/0,
          stop/0,
-         start_link/2,
+         start_link/3,
          open/2,
+         open/3,
          close/1,
          %% get
          get/2,
@@ -71,6 +72,8 @@
          }.
 -type http_verb() :: get | post | head | delete | patch | put | options.
 
+-type connection_type() :: http | https.
+
 
 %% @doc Starts the application and all the ones it depends on.
 -spec start() -> {ok, [atom()]}.
@@ -83,18 +86,26 @@ stop() ->
     application:stop(shotgun).
 
 %% @private
--spec start_link(string(), integer()) -> {ok, pid()} | ignore | {error, term()}.
-start_link(Host, Port) ->
-    gen_fsm:start(shotgun, [Host, Port], []).
+-spec start_link(string(), integer(), connection_type()) ->
+    {ok, pid()} | ignore | {error, term()}.
+start_link(Host, Port, Type) ->
+    gen_fsm:start(shotgun, [Host, Port, Type], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% @doc Opens a connection with the host in the port specified.
+%% @equiv get(Host, Port, http)
 -spec open(Host :: string(), Port :: integer()) -> {ok, pid()}.
 open(Host, Port) ->
-    supervisor:start_child(shotgun_sup, [Host, Port]).
+    open(Host, Port, http).
+
+%% @doc Opens a connection of the type provided with the host in port specified.
+-spec open(Host :: string(), Port :: integer(), Type :: connection_type()) ->
+    {ok, pid()}.
+open(Host, Port, Type) ->
+    supervisor:start_child(shotgun_sup, [Host, Port, Type]).
+
 
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
@@ -285,9 +296,12 @@ parse_event(EventBin) ->
 
 %% @private
 -spec init([term()]) -> term().
-init([Host, Port]) ->
-    Opts = [
-            {type, tcp},
+init([Host, Port, Type]) ->
+    GunType = case Type of
+                  http -> tcp;
+                  https -> ssl
+              end,
+    Opts = [{type, GunType},
             {retry, 1},
             {retry_timeout, 1}
            ],
