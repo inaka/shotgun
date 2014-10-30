@@ -310,14 +310,13 @@ at_rest({get_async, {HandleEvent, AsyncMode}, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
     CleanState = clean_state(),
     NewState = CleanState#{
+                 from => From,
                  pid => Pid,
                  stream => StreamRef,
                  handle_event => HandleEvent,
                  async => true,
                  async_mode => AsyncMode
                 },
-    Result = {ok, StreamRef},
-    gen_fsm:reply(From, Result),
     {next_state, wait_response, NewState};
 at_rest({HttpVerb, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
@@ -344,13 +343,15 @@ wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
                 gen_fsm:reply(From, {ok, Response}),
                 Responses;
             true ->
-                queue:in(Response, Responses)
+                gen_fsm:reply(From, {ok, Response})
         end,
     {next_state, at_rest, State#{responses => NewResponses}};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
-              State) ->
+              #{from := From, stream := StreamRef} = State) ->
     StateName = case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
                     {<<"transfer-encoding">>, <<"chunked">>} ->
+                        Result = {ok, StreamRef},
+                        gen_fsm:reply(From, Result),
                         receive_chunk;
                     _ ->
                         receive_data
