@@ -150,117 +150,76 @@ get(Pid, Uri, Headers) ->
 %% </ul>
 %% @end
 -spec get(pid(), string(), headers(), options()) -> result().
-get(Pid, Uri, Headers0, Options) ->
-    #{handle_event := HandleEvent,
-      async := IsAsync,
-      async_mode := AsyncMode,
-      headers := Headers} = process_options(Options, Headers0, get),
-
-    Event = case IsAsync of
-                true ->
-                    {get_async, {HandleEvent, AsyncMode}, {Uri, Headers, []}};
-                false ->
-                    {get, {Uri, Headers, []}}
-           end,
-    StreamRef = gen_fsm:sync_send_event(Pid, Event),
-    {ok, StreamRef}.
+get(Pid, Uri, Headers, Options) ->
+    request(Pid, get, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>POST</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec post(pid(), string(), headers(), iodata(), options()) -> result().
-post(Pid, Uri, Headers0, Body, Options) ->
-    try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, post),
-        Event = {post, {Uri, Headers, Body}},
-        StreamRef = gen_fsm:sync_send_event(Pid, Event),
-        {ok, StreamRef}
-    catch
-        _:Reason -> {error, Reason}
-    end.
+post(Pid, Uri, Headers, Body, Options) ->
+    request(Pid, post, Uri, Headers, Body, Options).
 
 %% @doc Performs a <strong>DELETE</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 -spec delete(pid(), string(), headers(), options()) -> result().
-delete(Pid, Uri, Headers0, Options) ->
-    try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, delete),
-        Event = {delete, {Uri, Headers, []}},
-        StreamRef = gen_fsm:sync_send_event(Pid, Event),
-        {ok, StreamRef}
-    catch
-        _:Reason -> {error, Reason}
-    end.
+delete(Pid, Uri, Headers, Options) ->
+    request(Pid, delete, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>HEAD</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 -spec head(pid(), string(), headers(), options()) -> result().
-head(Pid, Uri, Headers0, Options) ->
-    try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, head),
-        Event = {head, {Uri, Headers, []}},
-        StreamRef = gen_fsm:sync_send_event(Pid, Event),
-        {ok, StreamRef}
-    catch
-        _:Reason -> {error, Reason}
+head(Pid, Uri, Headers, Options) ->
+    request(Pid, head, Uri, Headers, [], Options).
 
-    end.
 %% @doc Performs a <strong>OPTIONS</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
 -spec options(pid(), string(), headers(), options()) -> result().
-options(Pid, Uri, Headers0, Options) ->
-    try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, options),
-        Event = {options, {Uri, Headers, []}},
-        StreamRef = gen_fsm:sync_send_event(Pid, Event),
-        {ok, StreamRef}
-    catch
-        _:Reason -> {error, Reason}
-    end.
+options(Pid, Uri, Headers, Options) ->
+    request(Pid, options, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>PATCH</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec patch(pid(), string(), headers(), iodata(), options()) -> result().
-patch(Pid, Uri, Headers0, Body, Options) ->
-    try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, patch),
-        Event = {patch, {Uri, Headers, Body}},
-        StreamRef = gen_fsm:sync_send_event(Pid, Event),
-        {ok, StreamRef}
-    catch
-        _:Reason -> {error, Reason}
-    end.
+patch(Pid, Uri, Headers, Body, Options) ->
+    request(Pid, patch, Uri, Headers, Body, Options).
 
 %% @doc Performs a <strong>PUT</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec put(pid(), string(), headers(), iodata(), options()) -> result().
 put(Pid, Uri, Headers0, Body, Options) ->
-    try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, put),
-        Event = {put, {Uri, Headers, Body}},
-        StreamRef = gen_fsm:sync_send_event(Pid, Event),
-        {ok, StreamRef}
-    catch
-        _:Reason -> {error, Reason}
-    end.
+    request(Pid, put, Uri, Headers0, Body, Options).
 
 %% @doc Performs a request to <code>Uri</code> using the HTTP method
 %% specified by <code>Method</code>,  <code>Body</code> as the content data and
 %% <code>Headers</code> as the request's headers.
 -spec request(pid(), http_verb(), string(), headers(), iodata(), options()) ->
     result().
+request(Pid, get, Uri, Headers0, Body, Options) ->
+    try
+        check_uri(Uri),
+        #{handle_event := HandleEvent,
+          async := IsAsync,
+          async_mode := AsyncMode,
+          headers := Headers} = process_options(Options, Headers0, get),
+
+        Event = case IsAsync of
+                    true ->
+                        {get_async,
+                         {HandleEvent, AsyncMode},
+                         {Uri, Headers, Body}};
+                    false ->
+                        {get, {Uri, Headers, Body}}
+                end,
+        gen_fsm:sync_send_event(Pid, Event)
+    catch
+        _:Reason -> {error, Reason}
+    end;
 request(Pid, Method, Uri, Headers0, Body, Options) ->
     try
-        #{handle_event := HandleEvent,
-          headers := Headers} = process_options(Options, Headers0, Method),
+        check_uri(Uri),
+        #{headers := Headers} = process_options(Options, Headers0, Method),
         Event = {Method, {Uri, Headers, Body}},
-        Response = gen_fsm:sync_send_event(Pid, Event),
-        {ok, Response}
+        gen_fsm:sync_send_event(Pid, Event)
     catch
         _:Reason -> {error, Reason}
     end.
@@ -357,7 +316,8 @@ at_rest({get_async, {HandleEvent, AsyncMode}, Args}, From, #{pid := Pid}) ->
                  async => true,
                  async_mode => AsyncMode
                 },
-    gen_fsm:reply(From, StreamRef),
+    Result = {ok, StreamRef},
+    gen_fsm:reply(From, Result),
     {next_state, wait_response, NewState};
 at_rest({HttpVerb, Args}, From, #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
@@ -381,7 +341,7 @@ wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
     NewResponses =
         case Async of
             false ->
-                gen_fsm:reply(From, Response),
+                gen_fsm:reply(From, {ok, Response}),
                 Responses;
             true ->
                 queue:in(Response, Responses)
@@ -400,6 +360,10 @@ wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
       StateName,
       State#{status_code := StatusCode, headers := Headers}
     };
+wait_response({gun_error, _Pid, _StreamRef, Error},
+              #{from := From} = State) ->
+    gen_fsm:reply(From, {error, Error}),
+    {next_state, at_rest, State};
 wait_response(Event, State) ->
     {stop, {unexpected, Event}, State}.
 
@@ -416,10 +380,11 @@ receive_data({gun_data, _Pid, _StreamRef, fin, Data},
              #{data := DataAcc, from := From, status_code
                := StatusCode, headers := Headers} = State) ->
     NewData = <<DataAcc/binary, Data/binary>>,
-    gen_fsm:reply(From, #{status_code => StatusCode,
-                          headers => Headers,
-                          body => NewData
-                         }),
+    Result= {ok, #{status_code => StatusCode,
+                   headers => Headers,
+                   body => NewData
+                  }},
+    gen_fsm:reply(From, Result),
     {next_state, at_rest, State};
 receive_data({gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = State) ->
@@ -549,3 +514,7 @@ sse_events(Data, State = #{buffer := Buffer}) ->
         [Rest | Events] ->
             {lists:reverse(Events), State#{buffer := Rest}}
     end.
+
+%% @private
+check_uri([$/ | _]) -> ok;
+check_uri(_) -> throw(missing_slash_uri).
