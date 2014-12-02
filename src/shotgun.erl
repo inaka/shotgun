@@ -347,15 +347,16 @@ wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
         end,
     {next_state, at_rest, State#{responses => NewResponses}};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
-              #{from := From, stream := StreamRef} = State) ->
-    StateName = case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
-                    {<<"transfer-encoding">>, <<"chunked">>} ->
-                        Result = {ok, StreamRef},
-                        gen_fsm:reply(From, Result),
-                        receive_chunk;
-                    _ ->
-                        receive_data
-                end,
+              #{from := From, stream := StreamRef, async := Async} = State) ->
+    StateName =
+      case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
+        {<<"transfer-encoding">>, <<"chunked">>} when Async == true->
+          Result = {ok, StreamRef},
+          gen_fsm:reply(From, Result),
+          receive_chunk;
+        _ ->
+          receive_data
+      end,
     {
       next_state,
       StateName,
@@ -417,7 +418,7 @@ clean_state() ->
        status_code => undefined,
        headers => undefined,
        async => false,
-       chunk_mode => binary,
+       async_mode => binary,
        buffer => <<"">>
      }.
 
