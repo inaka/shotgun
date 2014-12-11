@@ -477,6 +477,7 @@ process_options(Options, HeadersMap, HttpVerb) ->
     HandleEvent = maps_get(handle_event, Options, undefined),
     Async = maps_get(async, Options, false),
     AsyncMode = maps_get(async_mode, Options, binary),
+    Timeout = maps_get(timeout, Options, 5000),
     case {Async, HttpVerb} of
         {true, get} -> ok;
         {true, Other} -> throw({async_unsupported, Other});
@@ -486,8 +487,8 @@ process_options(Options, HeadersMap, HttpVerb) ->
       async => Async,
       async_mode => AsyncMode,
       headers => Headers,
-      timeout => maps_get(timeout, Options, 5000)
-    }.
+      timeout => Timeout
+     }.
 
 %% @private
 basic_auth_header(Headers) ->
