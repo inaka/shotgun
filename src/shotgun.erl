@@ -68,7 +68,8 @@
            async => boolean(),
            async_data => binary | sse,
            handle_event => fun((fin | nofin, reference(), binary()) -> any()),
-           basic_auth => {string(), string()}
+           basic_auth => {string(), string()},
+           timeout => pos_integer() | infinity %% Default 5000 ms
          }.
 -type http_verb() :: get | post | head | delete | patch | put | options.
 
@@ -200,7 +201,8 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
         #{handle_event := HandleEvent,
           async := IsAsync,
           async_mode := AsyncMode,
-          headers := Headers} = process_options(Options, Headers0, get),
+          headers := Headers,
+          timeout := Timeout} = process_options(Options, Headers0, get),
 
         Event = case IsAsync of
                     true ->
@@ -210,16 +212,16 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
                     false ->
                         {get, {Uri, Headers, Body}}
                 end,
-        gen_fsm:sync_send_event(Pid, Event)
+        gen_fsm:sync_send_event(Pid, Event, Timeout)
     catch
         _:Reason -> {error, Reason}
     end;
 request(Pid, Method, Uri, Headers0, Body, Options) ->
     try
         check_uri(Uri),
-        #{headers := Headers} = process_options(Options, Headers0, Method),
+        #{headers := Headers, timeout := Timeout} = process_options(Options, Headers0, Method),
         Event = {Method, {Uri, Headers, Body}},
-        gen_fsm:sync_send_event(Pid, Event)
+        gen_fsm:sync_send_event(Pid, Event, Timeout)
     catch
         _:Reason -> {error, Reason}
     end.
@@ -483,7 +485,9 @@ process_options(Options, HeadersMap, HttpVerb) ->
     #{handle_event => HandleEvent,
       async => Async,
       async_mode => AsyncMode,
-      headers => Headers}.
+      headers => Headers,
+      timeout => maps_get(timeout, Options, 5000)
+    }.
 
 %% @private
 basic_auth_header(Headers) ->
