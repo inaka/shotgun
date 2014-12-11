@@ -85,6 +85,16 @@ as easy as specifying a `basic_auth` entry in the headers map:
 shotgun:close(Conn).
 ```
 
+### Addition options
+
+There are addition options for request:
+
+```erlang
+	#{
+		timeout => 5000, %% Request timeout. By default 5000 ms.
+	}
+```
+
 ### Consuming Server-sent Events
 
 To use **shogtun** with endpoints that generate SSE the request must be
