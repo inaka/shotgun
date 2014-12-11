@@ -74,6 +74,14 @@ specify the HTTP method as an argument in the form of an atom: `get`, `head`,
 **IMPORTANT:** When you are done using the shotgun connection remember to close
 it with `shogtun:close/1`.
 
+### HTTP Secure Requests
+
+It is possible to tell shotgun to use SSL by providing the atom `https` as the
+third argument when creating a connection with to the `open` function. Just
+like when performing regulst HTTP requests it is also necessary to specify
+a port. HTTPS servers typically listen for connections on port 443 and this
+will be the most likely value you'll need to use.
+
 ### Basic Authentication
 
 If you need to provide basic authentication credentials in your requests, it is
@@ -85,15 +93,19 @@ as easy as specifying a `basic_auth` entry in the headers map:
 shotgun:close(Conn).
 ```
 
-### Addition options
+### Specifying a Timeout
 
-There are addition options for request:
+The `timeout` option can be used to specifiy a value for all types of requests:
 
 ```erlang
-	#{
-		timeout => 5000, %% Request timeout. By default 5000 ms.
-	}
+{ok, Conn} = shotgun:open("google.com", 80).
+{error, Error} = shotgun:get(Conn, "/", #{}, #{timeout => 10}).
+io:format("~p~n", [Error]).
+%%= {timeout,{gen_fsm,sync_send_event,[<0.368.0>,{get,{"/",[],[]}},10]}}
+shotgun:close(Conn).
 ```
+
+The default `timeout` value is 5000 if none is specified.
 
 ### Consuming Server-sent Events
 
