@@ -78,7 +78,7 @@ it with `shogtun:close/1`.
 
 It is possible to tell shotgun to use SSL by providing the atom `https` as the
 third argument when creating a connection with to the `open` function. Just
-like when performing regulst HTTP requests it is also necessary to specify
+like when performing HTTP requests it is also necessary to specify
 a port. HTTPS servers typically listen for connections on port 443 and this
 will be the most likely value you'll need to use.
 
