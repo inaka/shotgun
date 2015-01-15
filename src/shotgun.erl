@@ -400,7 +400,13 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data}, State) ->
-    manage_chunk(IsFin, StreamRef, Data, State);
+    NewState = manage_chunk(IsFin, StreamRef, Data, State),
+    case IsFin of
+        fin ->
+            {next_state, at_rest, NewState};
+        nofin ->
+            {next_state, receive_chunk, NewState}
+    end;
 receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
     {next_state, at_rest, State}.
 
@@ -446,30 +452,30 @@ manage_chunk(IsFin, StreamRef, Data,
                        responses := Responses,
                        async_mode := binary}) ->
     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses),
-    {next_state, receive_chunk, State#{responses => NewResponses}};
+    State#{responses => NewResponses};
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := undefined,
                        responses := Responses,
                        async_mode := sse}) ->
-    {Events, NewState} = sse_events(Data, State),
+    {Events, NewState} = sse_events(IsFin, Data, State),
     FunAdd = fun(Event, Acc) ->
-                 queue:in({IsFin, StreamRef, Event}, Acc)
+                     queue:in({IsFin, StreamRef, Event}, Acc)
              end,
     NewResponses = lists:foldl(FunAdd, Responses, Events),
-    {next_state, receive_chunk, NewState#{responses => NewResponses}};
+    NewState#{responses => NewResponses};
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := HandleEvent,
                        async_mode := binary}) ->
     HandleEvent(IsFin, StreamRef, Data),
-    {next_state, receive_chunk, State};
+    State;
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := HandleEvent,
                        async_mode := sse}) ->
-    {Events, NewState} = sse_events(Data, State),
+    {Events, NewState} = sse_events(IsFin, Data, State),
     Fun = fun (Event) -> HandleEvent(IsFin, StreamRef, Event) end,
     lists:foreach(Fun, Events),
 
-    {next_state, receive_chunk, NewState}.
+    NewState.
 
 %% @private
 process_options(Options, HeadersMap, HttpVerb) ->
@@ -510,15 +516,17 @@ encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
 %% @private
-sse_events(Data, State = #{buffer := Buffer}) ->
+sse_events(IsFin, Data, State = #{buffer := Buffer}) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
     DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
-    case lists:reverse(DataList) of
-        [_] ->
+    case {IsFin, lists:reverse(DataList)} of
+        {fin, [_]} ->
+            {[<<>>], State#{buffer := NewBuffer}};
+        {nofin, [_]} ->
             {[], State#{buffer := NewBuffer}};
-        [<<>> | Events] ->
+        {_, [<<>> | Events]} ->
             {lists:reverse(Events), State#{buffer := <<"">>}};
-        [Rest | Events] ->
+        {_, [Rest | Events]} ->
             {lists:reverse(Events), State#{buffer := Rest}}
     end.
 
