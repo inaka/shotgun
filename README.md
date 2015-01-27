@@ -18,6 +18,8 @@ provides a simple API that has out-of-the-box support for SSE.
 
 ## Usage
 
+*shotgun* uses maps and hence requires Erlang 17 to compile and run.
+
 *shotgun* is an OTP application, so before being able to use it, it has to
 be started. Either add it as one of the applications in your
 [`.app`](http://www.erlang.org/doc/man/app.html) file or run the following
