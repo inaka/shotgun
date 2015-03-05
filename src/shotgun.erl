@@ -7,7 +7,7 @@
 -author("federico@inaka.net").
 -author("juan@inaka.net").
 
--behavior(gen_fsm).
+-behaviour(gen_fsm).
 
 -export([
          start/0,
@@ -219,7 +219,8 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
 request(Pid, Method, Uri, Headers0, Body, Options) ->
     try
         check_uri(Uri),
-        #{headers := Headers, timeout := Timeout} = process_options(Options, Headers0, Method),
+        #{headers := Headers, timeout := Timeout} =
+          process_options(Options, Headers0, Method),
         Event = {Method, {Uri, Headers, Body}},
         gen_fsm:sync_send_event(Pid, Event, Timeout)
     catch
