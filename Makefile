@@ -1,11 +1,11 @@
 PROJECT = shotgun
 
 DEPS = lager gun
-dep_lager = git https://github.com/basho/lager.git 2.0.3
-dep_gun = git https://github.com/extend/gun.git ea2de24f18
+dep_lager = git git://github.com/basho/lager.git 2.1.1
+dep_gun = git https://github.com/ninenines/gun.git f618634b
 
 SHELL_DEPS = sync
-dep_sync = git git://github.com/inaka/sync.git 0.1
+dep_sync = git git://github.com/inaka/sync.git 0.1.3
 
 include erlang.mk
 

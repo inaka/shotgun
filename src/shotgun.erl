@@ -263,10 +263,10 @@ init([Host, Port, Type]) ->
                   http -> tcp;
                   https -> ssl
               end,
-    Opts = [{type, GunType},
-            {retry, 1},
-            {retry_timeout, 1}
-           ],
+    Opts = #{transport      => GunType,
+             retry          => 1,
+             retry_timeout  => 1
+            },
     {ok, Pid} = gun:open(Host, Port, Opts),
     State = clean_state(),
     {ok, at_rest, State#{pid => Pid}}.
@@ -288,6 +288,19 @@ handle_sync_event(get_events,
 
 %% @private
 -spec handle_info(term(), atom(), term()) -> term().
+handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
+    {next_state, StateName, StateData};
+handle_info(
+    {gun_down, Pid, Protocol, {error, Reason},
+     KilledStreams, UnprocessedStreams}, StateName,
+    StateData = #{pid := Pid}) ->
+    error_logger:warning_msg(
+        "~p connection down on ~p: ~p (Killed: ~p, Unprocessed: ~p)",
+        [Protocol, Pid, Reason, KilledStreams, UnprocessedStreams]),
+    {next_state, StateName, StateData};
+handle_info(
+    {gun_down, Pid, _, _, _, _}, StateName, StateData = #{pid := Pid}) ->
+    {next_state, StateName, StateData};
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
     Module:StateName(Event, StateData).
