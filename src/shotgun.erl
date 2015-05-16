@@ -445,15 +445,6 @@ clean_state() ->
      }.
 
 %% @private
-maps_get(Key, Map, Default) ->
-    case maps:is_key(Key, Map) of
-        true ->
-            maps:get(Key, Map);
-        false ->
-            Default
-    end.
-
-%% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
 do_http_verb(Method, Pid, {Uri, Headers, Body}) ->
     MethodStr = string:to_upper(atom_to_list(Method)),
@@ -494,10 +485,10 @@ manage_chunk(IsFin, StreamRef, Data,
 %% @private
 process_options(Options, HeadersMap, HttpVerb) ->
     Headers = basic_auth_header(HeadersMap),
-    HandleEvent = maps_get(handle_event, Options, undefined),
-    Async = maps_get(async, Options, false),
-    AsyncMode = maps_get(async_mode, Options, binary),
-    Timeout = maps_get(timeout, Options, 5000),
+    HandleEvent = maps:get(handle_event, Options, undefined),
+    Async = maps:get(async, Options, false),
+    AsyncMode = maps:get(async_mode, Options, binary),
+    Timeout = maps:get(timeout, Options, 5000),
     case {Async, HttpVerb} of
         {true, get} -> ok;
         {true, Other} -> throw({async_unsupported, Other});
@@ -512,7 +503,7 @@ process_options(Options, HeadersMap, HttpVerb) ->
 
 %% @private
 basic_auth_header(Headers) ->
-    case maps_get(basic_auth, Headers, undefined) of
+    case maps:get(basic_auth, Headers, undefined) of
         undefined ->
             maps:to_list(Headers);
         {User, Password} ->
