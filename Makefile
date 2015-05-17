@@ -1,7 +1,6 @@
 PROJECT = shotgun
 
-DEPS = lager gun
-dep_lager = git git://github.com/basho/lager.git 2.1.1
+DEPS = gun
 dep_gun = git https://github.com/ninenines/gun.git f618634b
 
 SHELL_DEPS = sync
