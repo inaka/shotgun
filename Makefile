@@ -8,8 +8,7 @@ dep_sync = git git://github.com/inaka/sync.git 0.1.3
 
 include erlang.mk
 
-ERLC_OPTS += +'{parse_transform, lager_transform}' +warn_missing_spec
-TEST_ERLC_OPTS += +'{parse_transform, lager_transform}'
+ERLC_OPTS += +warn_missing_spec
 
 CONFIG = rel/sys.config
 
