@@ -1,14 +1,16 @@
 # Change Log
 
-## [Unreleased](https://github.com/inaka/shotgun/tree/HEAD)
+## [0.1.9](https://github.com/inaka/shotgun/tree/0.1.9) (2015-05-19)
 
-[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.8...HEAD)
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.8...0.1.9)
 
 **Fixed bugs:**
 
 - Change shotgun version [\#71](https://github.com/inaka/shotgun/issues/71)
 
 **Closed issues:**
+
+- Update Gun dependencies [\#80](https://github.com/inaka/shotgun/issues/80)
 
 - Remove lager as a dependency since it is not used anywhere [\#76](https://github.com/inaka/shotgun/issues/76)
 
@@ -17,6 +19,8 @@
 - Update gun version to 1.0.0-pre.1 [\#73](https://github.com/inaka/shotgun/issues/73)
 
 **Merged pull requests:**
+
+- \[Fix \#80\] Gun dependencies updated to 1.0.0-pre.1 [\#81](https://github.com/inaka/shotgun/pull/81) ([davecaos](https://github.com/davecaos))
 
 - \[\#73\] Update gun version, in rebar.config as well [\#79](https://github.com/inaka/shotgun/pull/79) ([jfacorro](https://github.com/jfacorro))
 
