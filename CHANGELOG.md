@@ -1,5 +1,19 @@
 # Change Log
 
+## [0.1.10](https://github.com/inaka/shotgun/tree/HEAD)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.9...HEAD)
+
+**Closed issues:**
+
+- Update rebar.config file [\#83](https://github.com/inaka/shotgun/issues/83)
+
+**Merged pull requests:**
+
+- \[fix \#83\] Update Gun dependency to 1.0.0-pre.1 [\#84](https://github.com/inaka/shotgun/pull/84) ([davecaos](https://github.com/davecaos))
+
+- \[Fix \#80\] Version Bump 0.1.9 [\#82](https://github.com/inaka/shotgun/pull/82) ([davecaos](https://github.com/davecaos))
+
 ## [0.1.9](https://github.com/inaka/shotgun/tree/0.1.9) (2015-05-19)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.8...0.1.9)
