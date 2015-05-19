@@ -1,5 +1,41 @@
 # Change Log
 
+## [Unreleased](https://github.com/inaka/shotgun/tree/HEAD)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.8...HEAD)
+
+**Fixed bugs:**
+
+- Change shotgun version [\#71](https://github.com/inaka/shotgun/issues/71)
+
+**Closed issues:**
+
+- Remove lager as a dependency since it is not used anywhere [\#76](https://github.com/inaka/shotgun/issues/76)
+
+- Remove shotgun:maps\_get/3 and just use maps:get/3 [\#74](https://github.com/inaka/shotgun/issues/74)
+
+- Update gun version to 1.0.0-pre.1 [\#73](https://github.com/inaka/shotgun/issues/73)
+
+**Merged pull requests:**
+
+- \[\#73\] Update gun version, in rebar.config as well [\#79](https://github.com/inaka/shotgun/pull/79) ([jfacorro](https://github.com/jfacorro))
+
+- \[Closes \#73\] Update gun version [\#78](https://github.com/inaka/shotgun/pull/78) ([jfacorro](https://github.com/jfacorro))
+
+- \[Closes \#76\] Remove lager dep [\#77](https://github.com/inaka/shotgun/pull/77) ([jfacorro](https://github.com/jfacorro))
+
+- \[Closes \#74\] Deleted function and used maps:get/3 [\#75](https://github.com/inaka/shotgun/pull/75) ([jfacorro](https://github.com/jfacorro))
+
+- Update LICENSE [\#72](https://github.com/inaka/shotgun/pull/72) ([andresinaka](https://github.com/andresinaka))
+
+## [0.1.8](https://github.com/inaka/shotgun/tree/0.1.8) (2015-04-10)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.7...0.1.8)
+
+**Merged pull requests:**
+
+- Make it compatible with latest release of 'gun' [\#68](https://github.com/inaka/shotgun/pull/68) ([cabol](https://github.com/cabol))
+
 ## [0.1.7](https://github.com/inaka/shotgun/tree/0.1.7) (2015-03-05)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.6...0.1.7)
