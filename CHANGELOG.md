@@ -1,14 +1,26 @@
 # Change Log
 
-## [0.1.10](https://github.com/inaka/shotgun/tree/HEAD)
+## [0.1.11](https://github.com/inaka/shotgun/tree/0.1.11) (2015-06-06)
 
-[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.9...HEAD)
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.10...0.1.11)
 
 **Closed issues:**
+
+- Stop using master branch for 'gun' dependency [\#67](https://github.com/inaka/shotgun/issues/67)
+
+## [0.1.10](https://github.com/inaka/shotgun/tree/0.1.10) (2015-05-19)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.9...0.1.10)
+
+**Closed issues:**
+
+- Version Bump to 0.1.10 [\#85](https://github.com/inaka/shotgun/issues/85)
 
 - Update rebar.config file [\#83](https://github.com/inaka/shotgun/issues/83)
 
 **Merged pull requests:**
+
+- \[Fix \#85\] Version bump to 0.1.10 [\#86](https://github.com/inaka/shotgun/pull/86) ([davecaos](https://github.com/davecaos))
 
 - \[fix \#83\] Update Gun dependency to 1.0.0-pre.1 [\#84](https://github.com/inaka/shotgun/pull/84) ([davecaos](https://github.com/davecaos))
 
@@ -49,10 +61,6 @@
 ## [0.1.8](https://github.com/inaka/shotgun/tree/0.1.8) (2015-04-10)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.7...0.1.8)
-
-**Merged pull requests:**
-
-- Make it compatible with latest release of 'gun' [\#68](https://github.com/inaka/shotgun/pull/68) ([cabol](https://github.com/cabol))
 
 ## [0.1.7](https://github.com/inaka/shotgun/tree/0.1.7) (2015-03-05)
 
