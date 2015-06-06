@@ -1,7 +1,7 @@
 PROJECT = shotgun
 
 DEPS = gun
-dep_gun = git https://github.com/ninenines/gun.git 1.0.0-pre.1
+dep_gun = git https://github.com/ninenines/gun.git 427230d
 
 SHELL_DEPS = sync
 dep_sync = git git://github.com/inaka/sync.git 0.1.3
