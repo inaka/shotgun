@@ -247,7 +247,9 @@ parse_event(EventBin) ->
                       <<"id: ", Id/binary>> ->
                           Event#{id => Id};
                       <<"event: ", EventName/binary>> ->
-                          Event#{event => EventName}
+                          Event#{event => EventName};
+                      <<_Comment/binary>> ->
+                          Event
                   end
           end,
     lists:foldr(FoldFun, #{data => []}, Lines).

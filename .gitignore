@@ -16,3 +16,5 @@ log
 logs
 storage
 *.packages.v*
+elvis
+.erlang.mk*
