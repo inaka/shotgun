@@ -90,7 +90,7 @@ stop() ->
 -spec start_link(string(), integer(), connection_type()) ->
     {ok, pid()} | ignore | {error, term()}.
 start_link(Host, Port, Type) ->
-    gen_fsm:start(shotgun, [Host, Port, Type], []).
+    gen_fsm:start_link(shotgun, [Host, Port, Type], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API
