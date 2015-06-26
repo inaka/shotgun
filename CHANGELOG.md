@@ -1,5 +1,25 @@
 # Change Log
 
+## [0.1.12](https://github.com/inaka/shotgun/tree/0.1.12) (2015-06-26)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.11...0.1.12)
+
+**Fixed bugs:**
+
+- Shotgun supervisor does not realize children die [\#70](https://github.com/inaka/shotgun/issues/70)
+
+**Closed issues:**
+
+- SSE Comments are unrecognised [\#88](https://github.com/inaka/shotgun/issues/88)
+
+**Merged pull requests:**
+
+- \[\#70\] Terminate child so that it is not listed as a worker [\#92](https://github.com/inaka/shotgun/pull/92) ([jfacorro](https://github.com/jfacorro))
+
+- Updated license [\#91](https://github.com/inaka/shotgun/pull/91) ([spike886](https://github.com/spike886))
+
+- \[\#88\] fix unrecognised events in parse\_event\(\) [\#89](https://github.com/inaka/shotgun/pull/89) ([davecaos](https://github.com/davecaos))
+
 ## [0.1.11](https://github.com/inaka/shotgun/tree/0.1.11) (2015-06-06)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.10...0.1.11)
@@ -7,6 +27,12 @@
 **Closed issues:**
 
 - Stop using master branch for 'gun' dependency [\#67](https://github.com/inaka/shotgun/issues/67)
+
+**Merged pull requests:**
+
+- Version Bump to 0.1.11 [\#87](https://github.com/inaka/shotgun/pull/87) ([elbrujohalcon](https://github.com/elbrujohalcon))
+
+- Update dependencies [\#69](https://github.com/inaka/shotgun/pull/69) ([elbrujohalcon](https://github.com/elbrujohalcon))
 
 ## [0.1.10](https://github.com/inaka/shotgun/tree/0.1.10) (2015-05-19)
 
@@ -61,6 +87,10 @@
 ## [0.1.8](https://github.com/inaka/shotgun/tree/0.1.8) (2015-04-10)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.7...0.1.8)
+
+**Merged pull requests:**
+
+- Make it compatible with latest release of 'gun' [\#68](https://github.com/inaka/shotgun/pull/68) ([cabol](https://github.com/cabol))
 
 ## [0.1.7](https://github.com/inaka/shotgun/tree/0.1.7) (2015-03-05)
 
