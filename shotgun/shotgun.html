@@ -33,10 +33,11 @@
         Use the functions provided in this module to open a connection and make
         requests.</p></div>
 <div id="types" class="category"><h4><a href="#types">Types</a></h4><hr />
-    <div class="type"><h3 id="type-headers">headers() = map()</h3></div>
-    <div class="type"><h3 id="type-http_verb">http_verb() = get<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| post<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| head<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| delete<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| patch<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| put<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| options</h3></div>
-    <div class="type"><h3 id="type-options">options() = map()</h3></div>
-    <div class="type"><h3 id="type-response">response() = map()</h3></div>
+    <div class="type"><h3 id="type-connection_type">connection_type() = http | https</h3></div>
+    <div class="type"><h3 id="type-headers">headers() = #{}</h3></div>
+    <div class="type"><h3 id="type-http_verb">http_verb() = <br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get | post | head | delete | patch | put | options</h3></div>
+    <div class="type"><h3 id="type-options">options() = <br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#{async => boolean(),<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;async_data => binary | sse,<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;handle_event =><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fun((fin | nofin, reference(), binary()) -> any()),<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;basic_auth => {string(), string()},<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;timeout => integer() >= 1 | infinity}</h3></div>
+    <div class="type"><h3 id="type-response">response() = <br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#{status_code => integer(), header => #{}, body => binary()}</h3></div>
     <div class="type"><h3 id="type-result">result() = {ok, reference() | <a href="#type-response" class="seealso">response()</a>} | {error, term()}</h3></div></div>
 <div id="functions" class="category"><h4><a href="#functions">Functions</a></h4><hr />
 <div class="function">
@@ -60,8 +61,15 @@
 
 
 <div class="description">
+<p>Equivalent to <a href="#get/3" class="seealso">get(Host, Port, http)</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="open/1-1">open(Host::string(), Port::integer(), Type::connection_type()) -&gt; {ok, pid()}</h3>
 
-<p>Opens a connection with the host in the port specified.</p>
+
+<div class="description">
+
+<p>Opens a connection of the type provided with the host in port specified.</p>
 </div></div>
 <div class="function">
 <h3 id="close/1">close(Pid::pid()) -&gt; ok</h3>
@@ -86,7 +94,7 @@
 <p>Equivalent to <a href="#get/4" class="seealso">get(Pid, Uri, Headers, #{})</a>.</p>
 </div></div>
 <div class="function">
-<h3 id="get/1-2">get(Pid::pid(), Uri::string(), Headers0::headers(), Options::options()) -&gt; result()</h3>
+<h3 id="get/1-2">get(Pid::pid(), Uri::string(), Headers::headers(), Options::options()) -&gt; result()</h3>
 
 
 <div class="description">
@@ -118,7 +126,7 @@
   </list>
 </div></div>
 <div class="function">
-<h3 id="post/1">post(Pid::pid(), Uri::string(), Headers0::headers(), Body::iodata(), Options::options()) -&gt; result()</h3>
+<h3 id="post/1">post(Pid::pid(), Uri::string(), Headers::headers(), Body::iodata(), Options::options()) -&gt; result()</h3>
 
 
 <div class="description">
@@ -127,7 +135,7 @@
   <code>Headers</code> and <code>Body</code> as the content data.</p>
 </div></div>
 <div class="function">
-<h3 id="delete/1">delete(Pid::pid(), Uri::string(), Headers0::headers(), Options::options()) -&gt; result()</h3>
+<h3 id="delete/1">delete(Pid::pid(), Uri::string(), Headers::headers(), Options::options()) -&gt; result()</h3>
 
 
 <div class="description">
@@ -136,7 +144,7 @@
   <code>Headers</code>.</p>
 </div></div>
 <div class="function">
-<h3 id="head/1">head(Pid::pid(), Uri::string(), Headers0::headers(), Options::options()) -&gt; result()</h3>
+<h3 id="head/1">head(Pid::pid(), Uri::string(), Headers::headers(), Options::options()) -&gt; result()</h3>
 
 
 <div class="description">
@@ -145,7 +153,7 @@
   <code>Headers</code>.</p>
 </div></div>
 <div class="function">
-<h3 id="options/1">options(Pid::pid(), Uri::string(), Headers0::headers(), Options::options()) -&gt; result()</h3>
+<h3 id="options/1">options(Pid::pid(), Uri::string(), Headers::headers(), Options::options()) -&gt; result()</h3>
 
 
 <div class="description">
@@ -154,7 +162,7 @@
   <code>Headers</code>.</p>
 </div></div>
 <div class="function">
-<h3 id="patch/1">patch(Pid::pid(), Uri::string(), Headers0::headers(), Body::iodata(), Options::options()) -&gt; result()</h3>
+<h3 id="patch/1">patch(Pid::pid(), Uri::string(), Headers::headers(), Body::iodata(), Options::options()) -&gt; result()</h3>
 
 
 <div class="description">
