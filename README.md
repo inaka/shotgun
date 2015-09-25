@@ -13,7 +13,7 @@ flexibility, at the cost of having to handle each raw message and data,
 including the construction of the reponse body data.
 Although this is great for a lot of scenarios, it can get cumbersome and
 repetitive after implementing it a couple of times. This is why we ended up
-creating **shogtun**, an HTTP client that uses **gun** behind the curtains but
+creating **shotgun**, an HTTP client that uses **gun** behind the curtains but
 provides a simple API that has out-of-the-box support for SSE.
 
 ## Usage
@@ -74,7 +74,7 @@ specify the HTTP method as an argument in the form of an atom: `get`, `head`,
 `options`, `delete`, `post`, `put` or `patch`.
 
 **IMPORTANT:** When you are done using the shotgun connection remember to close
-it with `shogtun:close/1`.
+it with `shotgun:close/1`.
 
 ### HTTP Secure Requests
 
@@ -111,7 +111,7 @@ The default `timeout` value is 5000 if none is specified.
 
 ### Consuming Server-sent Events
 
-To use **shogtun** with endpoints that generate SSE the request must be
+To use **shotgun** with endpoints that generate SSE the request must be
 configured using some values in the options map, which supports the following
 entries:
 
