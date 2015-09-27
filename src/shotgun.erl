@@ -12,9 +12,10 @@
 -export([
          start/0,
          stop/0,
-         start_link/3,
+         start_link/4,
          open/2,
          open/3,
+         open/4,
          close/1,
          %% get
          get/2,
@@ -75,6 +76,12 @@
 
 -type connection_type() :: http | https.
 
+-type open_opts() ::
+        #{
+            transport_opts => [],
+            timeout => pos_integer() | infinity }.
+%% transport_opts are passed to Ranch's TCP transport, which is -itself- a thin layer over gen_tcp. <br/>
+%% timeout is passed to gun:await_up. Default if not specified is 5000 ms.
 
 %% @doc Starts the application and all the ones it depends on.
 -spec start() -> {ok, [atom()]}.
@@ -87,26 +94,36 @@ stop() ->
     application:stop(shotgun).
 
 %% @private
--spec start_link(string(), integer(), connection_type()) ->
+-spec start_link(string(), integer(), connection_type(), open_opts()) ->
     {ok, pid()} | ignore | {error, term()}.
-start_link(Host, Port, Type) ->
-    gen_fsm:start_link(shotgun, [Host, Port, Type], []).
+start_link(Host, Port, Type, Opts) ->
+    gen_fsm:start_link(shotgun, [Host, Port, Type, Opts], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% @equiv get(Host, Port, http)
+%% @equiv get(Host, Port, http, #{})
 -spec open(Host :: string(), Port :: integer()) -> {ok, pid()}.
 open(Host, Port) ->
     open(Host, Port, http).
 
-%% @doc Opens a connection of the type provided with the host in port specified.
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type()) ->
+    {ok, pid()};
+    (Host :: string(), Port :: integer(), Opts :: open_opts()) ->
     {ok, pid()}.
-open(Host, Port, Type) ->
-    supervisor:start_child(shotgun_sup, [Host, Port, Type]).
+%% @equiv get(Host, Port, Type, #{}) or get(Host, Port, http, Opts)
+open(Host, Port, Type) when is_atom(Type) ->
+  open(Host, Port, Type, #{});
 
+open(Host, Port, Opts) when is_map(Opts) ->
+  open(Host, Port, http, Opts).
+
+%% @doc Opens a connection of the type provided with the host and port specified and the specified connection timeout and/or Ranch transport options.
+-spec open(Host :: string(), Port :: integer(), Type :: connection_type(), Opts :: open_opts()) ->
+    {ok, pid()}.
+open(Host, Port, Type, Opts) ->
+    supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
 
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
@@ -259,19 +276,33 @@ parse_event(EventBin) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @private
--spec init([term()]) -> term().
-init([Host, Port, Type]) ->
+-spec init([term()]) -> {ok, at_rest, map()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
+init([Host, Port, Type, Opts]) ->
     GunType = case Type of
                   http -> tcp;
                   https -> ssl
               end,
-    Opts = #{transport      => GunType,
-             retry          => 1,
-             retry_timeout  => 1
-            },
-    {ok, Pid} = gun:open(Host, Port, Opts),
-    State = clean_state(),
-    {ok, at_rest, State#{pid => Pid}}.
+    TransportOpts = maps:get(transport_opts, Opts, []),
+    GunOpts = #{transport      => GunType,
+                retry          => 1,
+                retry_timeout  => 1,
+                transport_opts => TransportOpts
+               },
+    Timeout = maps:get(timeout, Opts, 5000),
+    {ok, Pid} = gun:open(Host, Port, GunOpts),
+    case gun:await_up(Pid, Timeout) of
+      {ok, _} ->
+        State = clean_state(),
+        {ok, at_rest, State#{pid => Pid}};
+      %The only apparent timeout for gun:open is the connection timeout of the
+      %underlying transport. So, a timeout message here comes from gun:await_up.
+      {error, timeout} ->
+        {stop, gun_open_timeout};
+      %gun currently terminates with reason normal if gun:open fails to open
+      %the requested connection. This bubbles up through gun:await_up.
+      {error, normal} ->
+        {stop, gun_open_failed}
+    end.
 
 %% @private
 -spec handle_event(term(), atom(), term()) -> term().
