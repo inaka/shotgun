@@ -569,5 +569,8 @@ sse_events(IsFin, Data, State = #{buffer := Buffer}) ->
     end.
 
 %% @private
-check_uri([$/ | _]) -> ok;
-check_uri(_) -> throw(missing_slash_uri).
+check_uri(U) ->
+  case string:chr(U, $/) of
+    0 -> throw(missing_slash_uri);
+    _ -> ok
+  end.
