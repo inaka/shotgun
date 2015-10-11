@@ -104,14 +104,15 @@ start_link(Host, Port, Type, Opts) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @equiv get(Host, Port, http, #{})
--spec open(Host :: string(), Port :: integer()) -> {ok, pid()}.
+-spec open(Host :: string(), Port :: integer()) ->
+    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout}.
 open(Host, Port) ->
     open(Host, Port, http).
 
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type()) ->
-    {ok, pid()};
+    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout};
     (Host :: string(), Port :: integer(), Opts :: open_opts()) ->
-    {ok, pid()}.
+    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout}.
 %% @equiv get(Host, Port, Type, #{}) or get(Host, Port, http, Opts)
 open(Host, Port, Type) when is_atom(Type) ->
   open(Host, Port, Type, #{});
@@ -121,7 +122,7 @@ open(Host, Port, Opts) when is_map(Opts) ->
 
 %% @doc Opens a connection of the type provided with the host and port specified and the specified connection timeout and/or Ranch transport options.
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type(), Opts :: open_opts()) ->
-    {ok, pid()}.
+    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout}.
 open(Host, Port, Type, Opts) ->
     supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
 
