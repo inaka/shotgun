@@ -2,7 +2,7 @@
  [
   {description,
    "better than just a gun"},
-  {vsn, "0.1.12"},
+  {vsn, "0.1.13"},
   {applications,
     [kernel,
      stdlib,
