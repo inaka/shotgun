@@ -7,7 +7,7 @@
          stop/1
         ]).
 
--spec start(term(), term()) -> ok.
+-spec start(term(), term()) -> {ok, pid()}.
 start(_StartType, _StartArgs) ->
     shotgun_sup:start_link().
 

@@ -75,7 +75,7 @@
 -type options() ::
         #{
            async => boolean(),
-           async_data => binary | sse,
+           async_mode => binary | sse,
            handle_event => fun((fin | nofin, reference(), binary()) -> any()),
            basic_auth => {string(), string()},
            timeout => pos_integer() | infinity %% Default 5000 ms
@@ -86,11 +86,20 @@
 
 -type open_opts() ::
         #{
-            transport_opts => [],
-            timeout => pos_integer() | infinity }.
-%% transport_opts are passed to Ranch's TCP transport, which is -itself-
-%% a thin layer over gen_tcp. <br/>
-%% timeout is passed to gun:await_up. Default if not specified is 5000 ms.
+           %% transport_opts are passed to Ranch's TCP transport, which is
+           %% -itself- a thin layer over gen_tcp.
+           transport_opts => [],
+           %% timeout is passed to gun:await_up. Default if not specified
+           %% is 5000 ms.
+           timeout => pos_integer() | infinity
+         }.
+
+-type event() ::
+        #{
+           id    => binary(),
+           event => binary(),
+           data  => binary()
+         }.
 
 %% @doc Starts the application and all the ones it depends on.
 -spec start() -> {ok, [atom()]}.
@@ -164,17 +173,17 @@ get(Pid, Uri, Headers) ->
 %%     It currently only works for GET requests. Default value is false.
 %%   </li>
 %%   <li>
-%%     <code>async_data</code>:
+%%     <code>async_mode</code>:
 %%     when async is true the mode specifies how the data received will be
-%%     processed. binary mode treats eat chunk received as raw binary. sse mode
-%%     buffers each chunk, splitting the data received into SSE. Default value
-%%     is binary.
+%%     processed. <code>binary</code> mode treats eat chunk received as raw
+%%     binary. <code>see</code> mode buffers each chunk, splitting the data
+%%     received into SSE. Default value is <code>binary</code>.
 %%   </li>
 %%   <li>
 %%     <code>handle_event</code>:
 %%     this function will be called each time either a chunk is received
-%%     (<code>async_data = binary</code>) or an event is parsed
-%%     (<code>async_data = sse</code>). If no handle_event function is provided
+%%     (<code>async_mode = binary</code>) or an event is parsed
+%%     (<code>async_mode = sse</code>). If no handle_event function is provided
 %%     the data received is added to a queue, whose values can be obtained
 %%     calling the <code>shotgun:events/1</code>. Default value is undefined.
 %%   </li>
@@ -266,14 +275,13 @@ events(Pid) ->
 %% <code>&lt;&lt;"data: some content\n"&gt;&gt;</code> will be turned into the
 %% following map <code>#{&lt;&lt;"data"&gt;&gt; =>
 %% &lt;&lt;"some content"&gt;&gt;}</code>.
--spec parse_event(binary()) ->
-    {Data :: binary(), Id :: binary(), EventName :: binary()}.
+-spec parse_event(binary()) -> event().
 parse_event(EventBin) ->
     Lines = binary:split(EventBin, <<"\n">>, [global]),
     FoldFun = fun(Line, #{data := DataList} = Event) ->
                   case Line of
                       <<"data: ", Data/binary>> ->
-                          Event#{ data => [Data | DataList]};
+                          Event#{data => [Data | DataList]};
                       <<"id: ", Id/binary>> ->
                           Event#{id => Id};
                       <<"event: ", EventName/binary>> ->
@@ -288,9 +296,11 @@ parse_event(EventBin) ->
 %% gen_fsm callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+-type state() :: #{}.
+
 %% @private
--spec init([term()]) -> {ok, at_rest, map()}
-                        | {stop, gun_open_timeout} | {stop, gun_open_failed}.
+-spec init([term()]) ->
+    {ok, at_rest, state()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
 init([Host, Port, Type, Opts]) ->
     GunType = case Type of
                   http -> tcp;
@@ -319,13 +329,13 @@ init([Host, Port, Type, Opts]) ->
     end.
 
 %% @private
--spec handle_event(term(), atom(), term()) -> term().
+-spec handle_event(shutdown, atom(), state()) -> {stop, normal, state()}.
 handle_event(shutdown, _StateName, StateData) ->
     {stop, normal, StateData}.
 
 %% @private
 -spec handle_sync_event(term(), {pid(), term()}, atom(), term()) ->
-    term().
+    {reply, any(), atom(), state()}.
 handle_sync_event(get_events,
                   _From,
                   StateName,
@@ -334,7 +344,8 @@ handle_sync_event(get_events,
     {reply, Reply, StateName, State#{responses := queue:new()}}.
 
 %% @private
--spec handle_info(term(), atom(), term()) -> term().
+-spec handle_info(term(), atom(), term()) ->
+    {next_state, atom(), state()}.
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
 handle_info(
@@ -370,6 +381,7 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %See if we have work. If we do, dispatch.
 %If we don't, stay in at_rest.
 %% @private
+-spec at_rest(any(), state()) -> {next_state, atom(), state()}.
 at_rest(timeout, State) ->
   case get_work(State) of
     no_work ->
@@ -470,9 +482,9 @@ receive_data({gun_data, _Pid, _StreamRef, fin, Data},
                := StatusCode, headers := Headers} = State) ->
     NewData = <<DataAcc/binary, Data/binary>>,
     Result = {ok, #{status_code => StatusCode,
-                   headers => Headers,
-                   body => NewData
-                  }},
+                    headers => Headers,
+                    body => NewData
+                   }},
     gen_fsm:reply(From, Result),
     {next_state, at_rest, State, 0};
 receive_data({gun_error, _Pid, StreamRef, _Reason},
@@ -675,4 +687,3 @@ append_work(Work, State) ->
 %% @private
 get_pending_reqs(State) ->
   maps:get(pending_requests, State).
-
