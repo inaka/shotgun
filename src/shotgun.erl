@@ -101,6 +101,8 @@
            data  => binary()
          }.
 
+-export_type([event/0]).
+
 %% @doc Starts the application and all the ones it depends on.
 -spec start() -> {ok, [atom()]}.
 start() ->
