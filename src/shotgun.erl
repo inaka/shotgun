@@ -689,3 +689,5 @@ append_work(Work, State) ->
 %% @private
 get_pending_reqs(State) ->
   maps:get(pending_requests, State).
+
+% vim: et sw=4 sts=4

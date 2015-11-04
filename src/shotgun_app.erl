@@ -14,3 +14,5 @@ start(_StartType, _StartArgs) ->
 -spec stop(term()) -> ok.
 stop(_State) ->
     ok.
+
+% vim: et sw=4 sts=4
