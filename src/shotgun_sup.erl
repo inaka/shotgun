@@ -19,3 +19,5 @@ init([]) ->
     Procs = [{shotgun, {shotgun, start_link, []},
               temporary, 5000, worker, [shotgun]}],
     {ok, {{simple_one_for_one, 10, 10}, Procs}}.
+
+% vim: et sw=4 sts=4
