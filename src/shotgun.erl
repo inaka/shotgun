@@ -156,12 +156,12 @@ close(Pid) ->
     ok.
 
 %% @equiv get(Pid, Uri, #{}, #{})
--spec get(pid(), string()) -> result().
+-spec get(pid(), iodata()) -> result().
 get(Pid, Uri) ->
     get(Pid, Uri, #{}, #{}).
 
 %% @equiv get(Pid, Uri, Headers, #{})
--spec get(pid(), string(), headers()) -> result().
+-spec get(pid(), iodata(), headers()) -> result().
 get(Pid, Uri, Headers) ->
     get(Pid, Uri, Headers, #{}).
 
@@ -191,50 +191,50 @@ get(Pid, Uri, Headers) ->
 %%   </li>
 %% </ul>
 %% @end
--spec get(pid(), string(), headers(), options()) -> result().
+-spec get(pid(), iodata(), headers(), options()) -> result().
 get(Pid, Uri, Headers, Options) ->
     request(Pid, get, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>POST</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
--spec post(pid(), string(), headers(), iodata(), options()) -> result().
+-spec post(pid(), iodata(), headers(), iodata(), options()) -> result().
 post(Pid, Uri, Headers, Body, Options) ->
     request(Pid, post, Uri, Headers, Body, Options).
 
 %% @doc Performs a <strong>DELETE</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
--spec delete(pid(), string(), headers(), options()) -> result().
+-spec delete(pid(), iodata(), headers(), options()) -> result().
 delete(Pid, Uri, Headers, Options) ->
     request(Pid, delete, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>HEAD</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
--spec head(pid(), string(), headers(), options()) -> result().
+-spec head(pid(), iodata(), headers(), options()) -> result().
 head(Pid, Uri, Headers, Options) ->
     request(Pid, head, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>OPTIONS</strong> request to <code>Uri</code> using
 %% <code>Headers</code>.
--spec options(pid(), string(), headers(), options()) -> result().
+-spec options(pid(), iodata(), headers(), options()) -> result().
 options(Pid, Uri, Headers, Options) ->
     request(Pid, options, Uri, Headers, [], Options).
 
 %% @doc Performs a <strong>PATCH</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
--spec patch(pid(), string(), headers(), iodata(), options()) -> result().
+-spec patch(pid(), iodata(), headers(), iodata(), options()) -> result().
 patch(Pid, Uri, Headers, Body, Options) ->
     request(Pid, patch, Uri, Headers, Body, Options).
 
 %% @doc Performs a <strong>PUT</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
--spec put(pid(), string(), headers(), iodata(), options()) -> result().
+-spec put(pid(), iodata(), headers(), iodata(), options()) -> result().
 put(Pid, Uri, Headers0, Body, Options) ->
     request(Pid, put, Uri, Headers0, Body, Options).
 
 %% @doc Performs a request to <code>Uri</code> using the HTTP method
 %% specified by <code>Method</code>,  <code>Body</code> as the content data and
 %% <code>Headers</code> as the request's headers.
--spec request(pid(), http_verb(), string(), headers(), iodata(), options()) ->
+-spec request(pid(), http_verb(), iodata(), headers(), iodata(), options()) ->
     result().
 request(Pid, get, Uri, Headers0, Body, Options) ->
     try
@@ -635,7 +635,11 @@ sse_events(IsFin, Data, State = #{buffer := Buffer}) ->
 
 %% @private
 check_uri([$/ | _]) -> ok;
-check_uri(_) -> throw(missing_slash_uri).
+check_uri(U) ->
+  case iolist_to_binary(U) of
+    <<"/", _/binary>> -> ok;
+    _ -> throw (missing_slash_uri)
+  end.
 
 %% @private
 enqueue_work_or_stop(FSM = at_rest, Event, From, State) ->
