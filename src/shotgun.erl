@@ -238,7 +238,7 @@ put(Pid, Uri, Headers0, Body, Options) ->
 %% <code>Headers</code> as the request's headers.
 -spec request(pid(), http_verb(), iodata(), headers(), iodata(), options()) ->
     result().
-request(Pid, get, Uri, Headers0, Body, Options) ->
+request(Pid, Method, Uri, Headers0, Body, Options) ->
     Ref = make_ref(),
     try
         check_uri(Uri),
@@ -246,30 +246,15 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
           async := IsAsync,
           async_mode := AsyncMode,
           headers := Headers,
-          timeout := Timeout} = process_options(Options, Headers0, get),
-
+          timeout := Timeout} = process_options(Options, Headers0, Method),
         Event = case IsAsync of
                     true ->
                         {get_async,
                          {HandleEvent, AsyncMode},
                          {Ref, Uri, Headers, Body}};
                     false ->
-                        {get, {Ref, Uri, Headers, Body}}
+                        {Method, {Ref, Uri, Headers, Body}}
                 end,
-        gen_fsm:sync_send_event(Pid, Event, Timeout)
-    catch
-        exit:{timeout, Rest} ->
-            gen_fsm:send_all_state_event(Pid, {cancel_req, Ref}),
-            {error, {timeout, Rest}};
-        _:Reason -> {error, Reason}
-    end;
-request(Pid, Method, Uri, Headers0, Body, Options) ->
-    Ref = make_ref(),
-    try
-        check_uri(Uri),
-        #{headers := Headers, timeout := Timeout} =
-          process_options(Options, Headers0, Method),
-        Event = {Method, {Ref, Uri, Headers, Body}},
         gen_fsm:sync_send_event(Pid, Event, Timeout)
     catch
         exit:{timeout, Rest} ->
