@@ -9,99 +9,101 @@
 
 -behaviour(gen_fsm).
 
--export([
-         start/0,
-         stop/0,
-         start_link/4,
-         open/2,
-         open/3,
-         open/4,
-         close/1,
-         %% get
-         get/2,
-         get/3,
-         get/4,
-         %% post
-         post/5,
-         %% delete
-         delete/4,
-         %% head
-         head/4,
-         %% options
-         options/4,
-         %% patch
-         patch/5,
-         %% put
-         put/5,
-         %% generic request
-         request/6,
-         %% events
-         events/1
+-export([ start/0
+        , stop/0
+        , start_link/4
         ]).
 
--export([
-         init/1,
-         handle_event/3,
-         handle_sync_event/4,
-         handle_info/3,
-         terminate/3,
-         code_change/4
+-export([ open/2
+        , open/3
+        , open/4
+        , close/1
         ]).
 
--export([
-         at_rest/2,
-         wait_response/2,
-         receive_data/2,
-         receive_chunk/2,
-         parse_event/1
+-export([ %% get
+          get/2
+        , get/3
+        , get/4
+          %% post
+        , post/5
+          %% delete
+        , delete/4
+          %% head
+        , head/4
+          %% options
+        , options/4
+          %% patch
+        , patch/5
+          %% put
+        , put/4
+        , put/5
+          %% generic request
+        , request/6
+          %% data
+        , data/2
+        , data/3
+          %% events
+        , events/1
+        ]).
+
+-export([ init/1
+        , handle_event/3
+        , handle_sync_event/4
+        , handle_info/3
+        , terminate/3
+        , code_change/4
+        ]).
+
+-export([ at_rest/2
+        , wait_response/2
+        , receive_data/2
+        , receive_chunk/2
+        , parse_event/1
         ]).
 
 %Work request handlers
--export([
-         at_rest/3,
-         wait_response/3,
-         receive_data/3,
-         receive_chunk/3
+-export([ at_rest/3
+        , wait_response/3
+        , receive_data/3
+        , receive_chunk/3
         ]).
 
--type response() ::
-        #{
-           status_code => integer(),
-           header => map(),
-           body => binary()
-         }.
--type result() :: {ok, reference() | response()} | {error, term()}.
--type headers() :: #{}.
--type options() ::
-        #{
-           async => boolean(),
-           async_mode => binary | sse,
-           handle_event => fun((fin | nofin, reference(), binary()) -> any()),
-           basic_auth => {string(), string()},
-           timeout => pos_integer() | infinity %% Default 5000 ms
-         }.
--type http_verb() :: get | post | head | delete | patch | put | options.
-
 -type connection_type() :: http | https.
-
--type open_opts() ::
-        #{
-           %% transport_opts are passed to Ranch's TCP transport, which is
+-type open_opts()       ::
+        #{ %% transport_opts are passed to Ranch's TCP transport, which is
            %% -itself- a thin layer over gen_tcp.
-           transport_opts => [],
+           transport_opts => []
            %% timeout is passed to gun:await_up. Default if not specified
            %% is 5000 ms.
-           timeout => pos_integer() | infinity
+         , timeout => pos_integer() | infinity
          }.
 
--type event() ::
-        #{
-           id    => binary(),
-           event => binary(),
-           data  => binary()
+-type connection() :: pid().
+-type http_verb()  :: get | post | head | delete | patch | put | options.
+-type uri()        :: iodata().
+-type headers()    :: #{}.
+-type body()       :: iodata().
+-type options()    ::
+        #{ async => boolean()
+         , async_mode => binary | sse
+         , handle_event => fun((fin | nofin, reference(), binary()) -> any())
+         , basic_auth => {string(), string()}
+         , timeout => pos_integer() | infinity %% Default 5000 ms
          }.
 
--export_type([event/0]).
+-type response() :: #{ status_code => integer()
+                     , header => map()
+                     , body => binary()
+                     }.
+
+-type result()   :: {ok, reference() | response()} | {error, term()}.
+
+-type event()    :: #{ id    => binary()
+                     , event => binary()
+                     , data  => binary()
+                     }.
+
+-export_type([response/0, event/0]).
 
 %% @doc Starts the application and all the ones it depends on.
 -spec start() -> {ok, [atom()]}.
@@ -225,9 +227,15 @@ options(Pid, Uri, Headers, Options) ->
 patch(Pid, Uri, Headers, Body, Options) ->
     request(Pid, patch, Uri, Headers, Body, Options).
 
+%% @doc Performs a chunked <strong>PUT</strong> request to <code>Uri</code>
+%% using %% <code>Headers</code> as the content data.
+-spec put(connection(), uri(), headers(), options()) -> result().
+put(Pid, Uri, Headers0, Options) ->
+    request(Pid, put, Uri, Headers0, body_chunked, Options).
+
 %% @doc Performs a <strong>PUT</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
--spec put(pid(), iodata(), headers(), iodata(), options()) -> result().
+-spec put(connection(), uri(), headers(), body(), options()) -> result().
 put(Pid, Uri, Headers0, Body, Options) ->
     request(Pid, put, Uri, Headers0, Body, Options).
 
@@ -267,6 +275,15 @@ request(Pid, Method, Uri, Headers0, Body, Options) ->
     catch
         _:Reason -> {error, Reason}
     end.
+
+%% @doc Send data when the
+-spec data(connection(), body()) -> ok.
+data(Conn, Data) ->
+    data(Conn, Data, nofin).
+
+-spec data(connection(), body(), fin | nofin) -> ok.
+data(Conn, Data, FinNoFin) ->
+    gen_fsm:send_event(Conn, {data, Data, FinNoFin}).
 
 %% @doc Returns a list of all received events up to now.
 -spec events(Pid :: pid()) -> [{nofin | fin, reference(), binary()}].
@@ -386,6 +403,7 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %% @private
 -spec at_rest(any(), state()) -> {next_state, atom(), state()}.
 at_rest(timeout, State) ->
+    io:format("at_rest timeout~n"),
     case get_work(State) of
         no_work ->
             {next_state, at_rest, State};
@@ -407,13 +425,18 @@ at_rest({get_async, {HandleEvent, AsyncMode}, Args, From},
                 },
     {next_state, wait_response, NewState};
 at_rest({HttpVerb, Args, From}, State = #{pid := Pid}) ->
+    {_, _, Body} = Args,
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
     CleanState = clean_state(State),
-    NewState = CleanState#{
-                 pid => Pid,
-                 stream => StreamRef,
-                 from => From
-                },
+    NewState = CleanState#{ pid    => Pid
+                          , stream => StreamRef
+                          , from   => From
+                          },
+    case Body of
+        body_chunked ->
+            gen_fsm:send_event(self(), body_chunked);
+        _ -> ok
+    end,
     {next_state, wait_response, NewState}.
 
 -spec at_rest(term(), pid(), term()) -> term().
@@ -447,22 +470,29 @@ wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               #{from := From, stream := StreamRef, async := Async} = State) ->
     StateName =
       case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
-        {<<"transfer-encoding">>, <<"chunked">>} when Async == true->
-          Result = {ok, StreamRef},
-          gen_fsm:reply(From, Result),
-          receive_chunk;
-        _ ->
-          receive_data
+          {<<"transfer-encoding">>, <<"chunked">>} when Async == true->
+              Result = {ok, StreamRef},
+              gen_fsm:reply(From, Result),
+              receive_chunk;
+          _ ->
+              receive_data
       end,
-    {
-      next_state,
-      StateName,
-      State#{status_code := StatusCode, headers := Headers}
+    { next_state
+    , StateName
+    , State#{status_code := StatusCode, headers := Headers}
     };
 wait_response({gun_error, _Pid, _StreamRef, Error},
               #{from := From} = State) ->
     gen_fsm:reply(From, {error, Error}),
     {next_state, at_rest, State, 0};
+wait_response(body_chunked,
+              #{stream := StreamRef, from := From} = State) ->
+    gen_fsm:reply(From, {ok, StreamRef}),
+    {next_state, wait_response, State};
+wait_response({data, Data, FinNoFin},
+              #{stream := StreamRef, pid := Pid} = State) ->
+    ok = gun:data(Pid, StreamRef, FinNoFin, Data),
+    {next_state, wait_response, State};
 wait_response(Event, State) ->
     {stop, {unexpected, Event}, State}.
 
@@ -528,26 +558,31 @@ clean_state(State) when is_map(State) ->
     clean_state(get_pending_reqs(State));
 clean_state(Reqs) ->
     #{
-       pid => undefined,
-       stream => undefined,
-       handle_event => undefined,
-       from => undefined,
-       responses => queue:new(),
-       data => <<"">>,
-       status_code => undefined,
-       headers => undefined,
-       async => false,
-       async_mode => binary,
-       buffer => <<"">>,
+       pid              => undefined,
+       stream           => undefined,
+       handle_event     => undefined,
+       from             => undefined,
+       responses        => queue:new(),
+       data             => <<"">>,
+       status_code      => undefined,
+       headers          => undefined,
+       async            => false,
+       async_mode       => binary,
+       buffer           => <<"">>,
        pending_requests => Reqs
      }.
 
 %% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
+do_http_verb(Method, Pid, {Uri, Headers, body_chunked}) ->
+    gun:request(Pid, http_verb_bin(Method), Uri, Headers);
 do_http_verb(Method, Pid, {Uri, Headers, Body}) ->
+    gun:request(Pid, http_verb_bin(Method), Uri, Headers, Body).
+
+-spec http_verb_bin(atom()) -> binary().
+http_verb_bin(Method) ->
     MethodStr = string:to_upper(atom_to_list(Method)),
-    MethodBin = list_to_binary(MethodStr),
-    gun:request(Pid, MethodBin, Uri, Headers, Body).
+    list_to_binary(MethodStr).
 
 %% @private
 manage_chunk(IsFin, StreamRef, Data,
