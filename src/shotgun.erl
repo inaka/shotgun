@@ -25,6 +25,7 @@
         , get/3
         , get/4
           %% post
+        , post/4
         , post/5
           %% delete
         , delete/4
@@ -33,6 +34,7 @@
           %% options
         , options/4
           %% patch
+        , patch/4
         , patch/5
           %% put
         , put/4
@@ -197,6 +199,12 @@ get(Pid, Uri, Headers) ->
 get(Pid, Uri, Headers, Options) ->
     request(Pid, get, Uri, Headers, [], Options).
 
+%% @doc Performs a chunked <strong>POST</strong> request to <code>Uri</code>
+%% using %% <code>Headers</code> as the content data.
+-spec post(connection(), uri(), headers(), options()) -> result().
+post(Pid, Uri, Headers, Options) ->
+    request(Pid, post, Uri, Headers, body_chunked, Options).
+
 %% @doc Performs a <strong>POST</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec post(connection(), uri(), headers(), body(), options()) -> result().
@@ -221,6 +229,12 @@ head(Pid, Uri, Headers, Options) ->
 options(Pid, Uri, Headers, Options) ->
     request(Pid, options, Uri, Headers, [], Options).
 
+%% @doc Performs a chunked <strong>PATCH</strong> request to <code>Uri</code>
+%% using %% <code>Headers</code> as the content data.
+-spec patch(connection(), uri(), headers(), options()) -> result().
+patch(Pid, Uri, Headers, Options) ->
+    request(Pid, post, Uri, Headers, body_chunked, Options).
+
 %% @doc Performs a <strong>PATCH</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec patch(connection(), uri(), headers(), body(), options()) -> result().
@@ -230,14 +244,14 @@ patch(Pid, Uri, Headers, Body, Options) ->
 %% @doc Performs a chunked <strong>PUT</strong> request to <code>Uri</code>
 %% using %% <code>Headers</code> as the content data.
 -spec put(connection(), uri(), headers(), options()) -> result().
-put(Pid, Uri, Headers0, Options) ->
-    request(Pid, put, Uri, Headers0, body_chunked, Options).
+put(Pid, Uri, Headers, Options) ->
+    request(Pid, put, Uri, Headers, body_chunked, Options).
 
 %% @doc Performs a <strong>PUT</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
 -spec put(connection(), uri(), headers(), body(), options()) -> result().
-put(Pid, Uri, Headers0, Body, Options) ->
-    request(Pid, put, Uri, Headers0, Body, Options).
+put(Pid, Uri, Headers, Body, Options) ->
+    request(Pid, put, Uri, Headers, Body, Options).
 
 %% @doc Performs a request to <code>Uri</code> using the HTTP method
 %% specified by <code>Method</code>,  <code>Body</code> as the content data and
