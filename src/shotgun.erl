@@ -500,7 +500,8 @@ wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
                 gen_fsm:reply(From, {ok, Response}),
                 Responses;
             true ->
-                gen_fsm:reply(From, {ok, Response})
+                gen_fsm:reply(From, {ok, Response}),
+                queue:in(Response, Responses)
         end,
     {next_state, at_rest, State#{responses => NewResponses}, 0};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
