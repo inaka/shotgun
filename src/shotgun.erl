@@ -90,7 +90,6 @@
         #{ async => boolean()
          , async_mode => binary | sse
          , handle_event => fun((fin | nofin, reference(), binary()) -> any())
-         , basic_auth => {string(), string()}
          , timeout => timeout() %% Default 5000 ms
          }.
 
@@ -133,14 +132,14 @@ start_link(Host, Port, Type, Opts) ->
 
 %% @equiv get(Host, Port, http, #{})
 -spec open(Host :: string(), Port :: integer()) ->
-    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout}.
+    {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
 open(Host, Port) ->
     open(Host, Port, http).
 
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type()) ->
-    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout};
+    {ok, pid()} | {error, gun_open_failed | gun_open_timeout};
     (Host :: string(), Port :: integer(), Opts :: open_opts()) ->
-    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout}.
+    {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
 %% @equiv get(Host, Port, Type, #{}) or get(Host, Port, http, Opts)
 open(Host, Port, Type) when is_atom(Type) ->
   open(Host, Port, Type, #{});
@@ -153,7 +152,7 @@ open(Host, Port, Opts) when is_map(Opts) ->
 %% transport options.
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type(),
            Opts :: open_opts()) ->
-    {ok, pid()} | {error, gun_open_failed} | {error, gun_timeout}.
+    {ok, pid()} | {error, gun_open_failed, gun_open_timeout}.
 open(Host, Port, Type, Opts) ->
     supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
 
@@ -418,9 +417,6 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 
 %% @private
 -spec at_rest(term(), pid(), term()) -> term().
-at_rest({data, _, _} = Event, _From, State) ->
-    unexpected_event_warning(at_rest, Event),
-    {reply, {error, unexpected}, at_rest, State};
 at_rest(Event, From, State) ->
     enqueue_work_or_stop(at_rest, Event, From, State).
 
@@ -436,17 +432,11 @@ wait_response(Event, From, State) ->
 
 %% @private
 -spec receive_data(term(), pid(), term()) -> term().
-receive_data({data, _, _} = Event, _From, State) ->
-    unexpected_event_warning(at_rest, Event),
-    {reply, {error, unexpected}, receive_data, State};
 receive_data(Event, From, State) ->
     enqueue_work_or_stop(receive_data, Event, From, State).
 
 %% @private
 -spec receive_chunk(term(), pid(), term()) -> term().
-receive_chunk({data, _, _} = Event, _From, State) ->
-    unexpected_event_warning(at_rest, Event),
-    {reply, {error, unexpected}, receive_chunk, State};
 receive_chunk(Event, From, State) ->
     enqueue_work_or_stop(receive_chunk, Event, From, State).
 
@@ -494,25 +484,15 @@ at_rest({HttpVerb, {_, _, Body} = Args, From}, State = #{pid := Pid}) ->
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
     exit(Reason);
 wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
-              #{from := From,
-                async := Async,
-                responses := Responses} = State) ->
+              #{from := From} = State) ->
     Response = #{status_code => StatusCode, headers => Headers},
-    NewResponses =
-        case Async of
-            false ->
-                gen_fsm:reply(From, {ok, Response}),
-                Responses;
-            true ->
-                gen_fsm:reply(From, {ok, Response}),
-                queue:in(Response, Responses)
-        end,
-    {next_state, at_rest, State#{responses => NewResponses}, 0};
+    gen_fsm:reply(From, {ok, Response}),
+    {next_state, at_rest, State, 0};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               #{from := From, stream := StreamRef, async := Async} = State) ->
     StateName =
       case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
-          {<<"transfer-encoding">>, <<"chunked">>} when Async == true->
+          {<<"transfer-encoding">>, <<"chunked">>} when Async ->
               Result = {ok, StreamRef},
               gen_fsm:reply(From, Result),
               receive_chunk;
@@ -579,26 +559,27 @@ receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
 
 %% @private
 -spec clean_state() -> map().
-clean_state() -> clean_state(queue:new()).
+clean_state() ->
+    clean_state(#{}).
 
 %% @private
 -spec clean_state(map()) -> map(); (queue:queue()) -> map().
-clean_state(State) when is_map(State) ->
-    clean_state(get_pending_reqs(State));
-clean_state(Reqs) ->
+clean_state(State) ->
+    Responses = maps:get(responses, State, queue:new()),
+    Requests  = maps:get(pending_requests, State, queue:new()),
     #{
        pid              => undefined,
        stream           => undefined,
        handle_event     => undefined,
        from             => undefined,
-       responses        => queue:new(),
+       responses        => Responses,
        data             => <<"">>,
        status_code      => undefined,
        headers          => undefined,
        async            => false,
        async_mode       => binary,
        buffer           => <<"">>,
-       pending_requests => Reqs
+       pending_requests => Requests
      }.
 
 %% @private
@@ -712,24 +693,25 @@ check_uri(U) ->
 
 %% @private
 -spec enqueue_work_or_stop(atom(), term(), pid(), state()) ->
-    {stop, {unexpected, term()}, state()} |
-    {next_state, atom(), state(), timeout}.
-enqueue_work_or_stop(FSM = at_rest, Event, From, State) ->
-    enqueue_work_or_stop(FSM, Event, From, State, 0);
-enqueue_work_or_stop(FSM, Event, From, State) ->
-    enqueue_work_or_stop(FSM, Event, From, State, infinity).
+    {stop, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
+enqueue_work_or_stop(StateName = at_rest, Event, From, State) ->
+    enqueue_work_or_stop(StateName, Event, From, State, 0);
+enqueue_work_or_stop(StateName, Event, From, State) ->
+    enqueue_work_or_stop(StateName, Event, From, State, infinity).
 
 %% @private
 -spec enqueue_work_or_stop(atom(), term(), pid(), state(), timeout()) ->
-    {stop, {unexpected, term()}, state()} |
-    {next_state, atom(), state(), timeout}.
-enqueue_work_or_stop(FSM, Event, From, State, Timeout) ->
+    {reply, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
+enqueue_work_or_stop(StateName, Event, From, State, Timeout) ->
     case create_work(Event, From) of
         {ok, Work} ->
             NewState = append_work(Work, State),
-            {next_state, FSM, NewState, Timeout};
+            {next_state, StateName, NewState, Timeout};
         not_work ->
-            {stop, {unexpected, Event}, State}
+            Error = {error, {unexpected, Event}},
+            {reply, Error, StateName, State}
     end.
 
 %% @private
@@ -762,18 +744,5 @@ get_work(State) ->
 %% @private
 -spec append_work(work(), state()) -> state().
 append_work(Work, State) ->
-    PendingReqs = get_pending_reqs(State),
-    NewPending = queue:in(Work, PendingReqs),
-    maps:put(pending_requests, NewPending, State).
-
-%% @private
--spec get_pending_reqs(state()) -> queue:queue().
-get_pending_reqs(State) ->
-    maps:get(pending_requests, State).
-
-%% @private
--spec unexpected_event_warning(atom(), any()) -> ok.
-unexpected_event_warning(StateName, Event) ->
-    error_logger:warning_msg( "Unexpected event in state '~p': ~p~n"
-                            , [StateName, Event]
-                            ).
+    #{pending_requests := PendingReqs} = State,
+    State#{pending_requests := queue:in(Work, PendingReqs)}.
