@@ -507,12 +507,12 @@ wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
                 gen_fsm:reply(From, {ok, Response}),
                 queue:in(Response, Responses)
         end,
-    {next_state, at_rest, State#{responses => NewResponses}, 0};
+    check_no_content_resp(StatusCode, State#{responses => NewResponses});
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               #{from := From, stream := StreamRef, async := Async} = State) ->
     StateName =
       case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
-          {<<"transfer-encoding">>, <<"chunked">>} when Async == true->
+          {<<"transfer-encoding">>, <<"chunked">>} when Async =:= true->
               Result = {ok, StreamRef},
               gen_fsm:reply(From, Result),
               receive_chunk;
@@ -552,7 +552,7 @@ receive_data({gun_data, _Pid, _StreamRef, fin, Data},
                     body => NewData
                    }},
     gen_fsm:reply(From, Result),
-    {next_state, at_rest, State, 0};
+    check_no_content_resp(StatusCode, State);
 receive_data({gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = State) ->
     {next_state, at_rest, State, 0}.
@@ -562,11 +562,12 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 -spec receive_chunk(term(), term()) -> term().
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
-receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data}, State) ->
+receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data},
+              #{status_code := StatusCode} = State) ->
     NewState = manage_chunk(IsFin, StreamRef, Data, State),
     case IsFin of
         fin ->
-            {next_state, at_rest, NewState, 0};
+            check_no_content_resp(StatusCode, NewState);
         nofin ->
             {next_state, receive_chunk, NewState}
     end;
@@ -777,3 +778,12 @@ unexpected_event_warning(StateName, Event) ->
     error_logger:warning_msg( "Unexpected event in state '~p': ~p~n"
                             , [StateName, Event]
                             ).
+
+%% @private
+check_no_content_resp(StatusCode, State) ->
+    case StatusCode of
+        204 ->
+            {stop, no_content, State};
+        _ ->
+            {next_state, at_rest, State, 0}
+    end.
