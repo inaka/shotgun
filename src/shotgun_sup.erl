@@ -14,7 +14,8 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 -spec init(term()) ->
-    {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
+          {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()},
+                [supervisor:child_spec()]}}.
 init([]) ->
     Procs = [{shotgun, {shotgun, start_link, []},
               temporary, 5000, worker, [shotgun]}],

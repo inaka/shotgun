@@ -71,13 +71,14 @@
         ]).
 
 -type connection_type() :: http | https.
+
 -type open_opts()       ::
         #{ %% transport_opts are passed to Ranch's TCP transport, which is
            %% -itself- a thin layer over gen_tcp.
            transport_opts => []
            %% timeout is passed to gun:await_up. Default if not specified
            %% is 5000 ms.
-         , timeout => pos_integer() | infinity
+         , timeout => timeout()
          }.
 
 -type connection() :: pid().
@@ -90,7 +91,7 @@
          , async_mode => binary | sse
          , handle_event => fun((fin | nofin, reference(), binary()) -> any())
          , basic_auth => {string(), string()}
-         , timeout => pos_integer() | infinity %% Default 5000 ms
+         , timeout => timeout() %% Default 5000 ms
          }.
 
 -type response() :: #{ status_code => integer()
@@ -104,6 +105,9 @@
                      , event => binary()
                      , data  => binary()
                      }.
+
+-type work()  :: {atom(), list(), pid()} |
+                 {atom(), {module(), boolean()}, list(), pid()}.
 
 -export_type([response/0, event/0]).
 
@@ -574,6 +578,7 @@ receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @private
+-spec clean_state() -> map().
 clean_state() -> clean_state(queue:new()).
 
 %% @private
@@ -609,6 +614,7 @@ http_verb_bin(Method) ->
     list_to_binary(MethodStr).
 
 %% @private
+-spec manage_chunk(fin | nofin, reference(), binary(), state()) -> state().
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := undefined,
                        responses := Responses,
@@ -640,6 +646,7 @@ manage_chunk(IsFin, StreamRef, Data,
     NewState.
 
 %% @private
+-spec process_options(map(), map(), http_verb()) -> map().
 process_options(Options, HeadersMap, HttpVerb) ->
     Headers = basic_auth_header(HeadersMap),
     HandleEvent = maps:get(handle_event, Options, undefined),
@@ -659,6 +666,7 @@ process_options(Options, HeadersMap, HttpVerb) ->
      }.
 
 %% @private
+-spec basic_auth_header(map()) -> list().
 basic_auth_header(Headers) ->
     case maps:get(basic_auth, Headers, undefined) of
         undefined ->
@@ -672,12 +680,13 @@ basic_auth_header(Headers) ->
     end.
 
 %% @private
-encode_basic_auth([], []) ->
-    [];
+-spec encode_basic_auth(string(), string()) -> binary().
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
 %% @private
+-spec sse_events(fin | nofin, binary(), state()) ->
+    {list(binary()), state()}.
 sse_events(IsFin, Data, State = #{buffer := Buffer}) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
     DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
@@ -693,6 +702,7 @@ sse_events(IsFin, Data, State = #{buffer := Buffer}) ->
     end.
 
 %% @private
+-spec check_uri(iolist()) -> ok .
 check_uri([$/ | _]) -> ok;
 check_uri(U) ->
   case iolist_to_binary(U) of
@@ -701,12 +711,18 @@ check_uri(U) ->
   end.
 
 %% @private
+-spec enqueue_work_or_stop(atom(), term(), pid(), state()) ->
+    {stop, {unexpected, term()}, state()} |
+    {next_state, atom(), state(), timeout}.
 enqueue_work_or_stop(FSM = at_rest, Event, From, State) ->
     enqueue_work_or_stop(FSM, Event, From, State, 0);
 enqueue_work_or_stop(FSM, Event, From, State) ->
     enqueue_work_or_stop(FSM, Event, From, State, infinity).
 
 %% @private
+-spec enqueue_work_or_stop(atom(), term(), pid(), state(), timeout()) ->
+    {stop, {unexpected, term()}, state()} |
+    {next_state, atom(), state(), timeout}.
 enqueue_work_or_stop(FSM, Event, From, State, Timeout) ->
     case create_work(Event, From) of
         {ok, Work} ->
@@ -717,6 +733,8 @@ enqueue_work_or_stop(FSM, Event, From, State, Timeout) ->
     end.
 
 %% @private
+-spec create_work({atom(), list()}, pid()) ->
+    not_work | {ok, work()}.
 create_work({M = get_async, {HandleEvent, AsyncMode}, Args}, From) ->
     {ok, {M, {HandleEvent, AsyncMode}, Args, From}};
 create_work({M, Args}, From)
@@ -729,6 +747,7 @@ create_work(_, _) ->
     not_work.
 
 %% @private
+-spec get_work(state()) -> no_work | {ok, work(), state()}.
 get_work(State) ->
     PendingReqs = maps:get(pending_requests, State),
     case queue:is_empty(PendingReqs) of
@@ -741,12 +760,14 @@ get_work(State) ->
     end.
 
 %% @private
+-spec append_work(work(), state()) -> state().
 append_work(Work, State) ->
     PendingReqs = get_pending_reqs(State),
     NewPending = queue:in(Work, PendingReqs),
     maps:put(pending_requests, NewPending, State).
 
 %% @private
+-spec get_pending_reqs(state()) -> queue:queue().
 get_pending_reqs(State) ->
     maps:get(pending_requests, State).
 
