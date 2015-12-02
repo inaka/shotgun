@@ -680,9 +680,7 @@ basic_auth_header(Headers) ->
     end.
 
 %% @private
--spec encode_basic_auth(string(), string()) -> [] | binary().
-encode_basic_auth([], []) ->
-    [];
+-spec encode_basic_auth(string(), string()) -> binary().
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
