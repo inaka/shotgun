@@ -70,6 +70,8 @@
         , receive_chunk/3
         ]).
 
+-define(LAST_EVENT_ID, <<"last-event-id">>).
+
 -type connection_type() :: http | https.
 
 -type open_opts()       ::
@@ -464,7 +466,7 @@ at_rest(timeout, State) ->
     end;
 at_rest({get_async, {HandleEvent, AsyncMode}, Args, From},
         State = #{pid := Pid}) ->
-    StreamRef = do_http_verb(get, Pid, Args),
+    StreamRef = do_http_verb(get, Pid, add_last_event_id(State, Args)),
     CleanState = clean_state(State),
     NewState = CleanState#{
                  from => From,
@@ -476,7 +478,7 @@ at_rest({get_async, {HandleEvent, AsyncMode}, Args, From},
                 },
     {next_state, wait_response, NewState};
 at_rest({HttpVerb, {_, _, Body} = Args, From}, State = #{pid := Pid}) ->
-    StreamRef = do_http_verb(HttpVerb, Pid, Args),
+    StreamRef = do_http_verb(HttpVerb, Pid, add_last_event_id(State, Args)),
     CleanState = clean_state(State),
     NewState = CleanState#{ pid    => Pid
                           , stream => StreamRef
@@ -507,7 +509,8 @@ wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
                 gen_fsm:reply(From, {ok, Response}),
                 queue:in(Response, Responses)
         end,
-    {next_state, at_rest, State#{responses => NewResponses}, 0};
+    State1 = set_last_event_id(State, Headers),
+    {next_state, at_rest, State1#{responses => NewResponses}, 0};
 wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               #{from := From, stream := StreamRef, async := Async} = State) ->
     StateName =
@@ -519,9 +522,10 @@ wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
           _ ->
               receive_data
       end,
+    State1 = set_last_event_id(State, Headers),
     { next_state
     , StateName
-    , State#{status_code := StatusCode, headers := Headers}
+    , State1#{status_code := StatusCode, headers := Headers}
     };
 wait_response({gun_error, _Pid, _StreamRef, Error},
               #{from := From} = State) ->
@@ -777,3 +781,20 @@ unexpected_event_warning(StateName, Event) ->
     error_logger:warning_msg( "Unexpected event in state '~p': ~p~n"
                             , [StateName, Event]
                             ).
+
+-spec set_last_event_id(state(), maybe_improper_list()) -> state().
+set_last_event_id(State, Headers) ->
+    case lists:keyfind(?LAST_EVENT_ID, 1, Headers) of
+        false ->
+            State;
+        {_, LastEventID} ->
+            State#{last_event_id => LastEventID}
+    end.
+
+-spec add_last_event_id(state(),
+                        {binary(), list(), atom() | iodata()}) ->
+    {binary(), list({binary(), iodata()}), atom() | iodata()}.
+add_last_event_id(#{last_event_id := LID} = _State, {Req, Headers, Body}) ->
+    {Req, [{?LAST_EVENT_ID, LID} | Headers], Body};
+add_last_event_id(_State, Args) ->
+    Args.
