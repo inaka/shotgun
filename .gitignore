@@ -18,3 +18,4 @@ logs
 storage
 *.packages.v*
 elvis
+.erlang.mk/
