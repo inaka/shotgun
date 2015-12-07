@@ -84,6 +84,11 @@ basic_auth(Config) ->
   {ok, Response2} = shotgun:get(Conn, "/basic-auth", Headers),
   #{status_code := 200} = Response2,
 
+  %% try the same request using proplists
+  {ok, Response3} = shotgun:get(Conn, "/basic-auth",
+                                [{basic_auth, {"user", "pass"}}]),
+  #{status_code := 200} = Response3,
+
   {comment, ""}.
 
 -spec get(shotgun_test_utils:config()) -> {comment, string()}.

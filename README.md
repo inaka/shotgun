@@ -10,7 +10,7 @@ For the times you need more than just a [gun](http://github.com/extend/gun).
 After using the [gun](http://github.com/extend/gun) library on a project where
 we needed to consume Server-sent Events (SSE) we found that it provided great
 flexibility, at the cost of having to handle each raw message and data,
-including the construction of the reponse body data.
+including the construction of the response body data.
 Although this is great for a lot of scenarios, it can get cumbersome and
 repetitive after implementing it a couple of times. This is why we ended up
 creating **shotgun**, an HTTP client that uses **gun** behind the curtains but
@@ -66,8 +66,9 @@ Which results in:
 Immediately after opening a connection we did a GET request, where we didn't
 specify any headers or options. Every HTTP method has its own **shotgun**
 function that takes a connection, a uri (which needs to include the slash),
-a headers map and an options map. Some of the functions (`post/5`, `put/5`
-and `patch/5`) also take a body argument.
+a headers map or a proplist containing the headers, and an options map. 
+Some of the functions (`post/5`, `put/5` and `patch/5`) also take a body 
+argument.
 
 Alternatively there's a generic `request/6` function in which the user can
 specify the HTTP method as an argument in the form of an atom: `get`, `head`,
@@ -91,7 +92,9 @@ as easy as specifying a `basic_auth` entry in the headers map:
 
 ```erlang
 {ok, Conn} = shotgun:open("site.com", 80),
-{ok, Response} = shotgun:get(Conn, "/user", #{basic_auth => {"user", "password"}),
+{ok, Response} = shotgun:get(Conn, "/user", #{basic_auth => {"user", "password"}}),
+, or
+{ok, Response} = shotgun:get(Conn, "/user", [{basic_auth, {"user", "password"}}]),
 shotgun:close(Conn).
 ```
 

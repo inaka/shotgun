@@ -84,7 +84,7 @@
 -type connection() :: pid().
 -type http_verb()  :: get | post | head | delete | patch | put | options.
 -type uri()        :: iodata().
--type headers()    :: #{}.
+-type headers()    :: #{} | proplists:proplist().
 -type body()       :: iodata() | body_chunked.
 -type options()    ::
         #{ async => boolean()
@@ -627,9 +627,9 @@ manage_chunk(IsFin, StreamRef, Data,
     NewState.
 
 %% @private
--spec process_options(map(), map(), http_verb()) -> map().
-process_options(Options, HeadersMap, HttpVerb) ->
-    Headers = basic_auth_header(HeadersMap),
+-spec process_options(map(), headers(), http_verb()) -> map().
+process_options(Options, Headers0, HttpVerb) ->
+    Headers = basic_auth_header(Headers0),
     HandleEvent = maps:get(handle_event, Options, undefined),
     Async = maps:get(async, Options, false),
     AsyncMode = maps:get(async_mode, Options, binary),
@@ -647,14 +647,15 @@ process_options(Options, HeadersMap, HttpVerb) ->
      }.
 
 %% @private
--spec basic_auth_header(map()) -> list().
+-spec basic_auth_header(headers()) -> proplists:proplist().
+basic_auth_header(Headers) when is_map(Headers) ->
+    basic_auth_header(maps:to_list(Headers));
 basic_auth_header(Headers) ->
-    case maps:get(basic_auth, Headers, undefined) of
-        undefined ->
-            maps:to_list(Headers);
-        {User, Password} ->
-            HeadersClean = maps:remove(basic_auth, Headers),
-            HeadersList = maps:to_list(HeadersClean),
+    case lists:keyfind(basic_auth, 1, Headers) of
+        false ->
+            Headers;
+        {_, {User, Password}} = Res ->
+            HeadersList = lists:delete(Res, Headers),
             Base64 = encode_basic_auth(User, Password),
             BasicAuth = {<<"Authorization">>, <<"Basic ", Base64/binary>>},
             [BasicAuth | HeadersList]
