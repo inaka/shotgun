@@ -1,6 +1,6 @@
 -module(http_simple_handler).
 
--include_lib("mixer/include/mixer.hrl").
+-include_lib("inaka_mixer/include/mixer.hrl").
 -mixin([
         {http_base_handler,
          [
