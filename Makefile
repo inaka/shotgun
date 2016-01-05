@@ -3,14 +3,14 @@ PROJECT = shotgun
 CONFIG = rel/sys.config
 
 DEPS       = cowlib gun
-TEST_DEPS  = katana cowboy mixer lasse
+TEST_DEPS  = katana cowboy inaka_mixer lasse
 SHELL_DEPS = sync
 
-dep_cowlib = git https://github.com/ninenines/cowlib.git  1.0.2
+dep_cowlib = hex 1.0.2
+dep_katana = hex 0.2.18 
+dep_cowboy = hex 1.0.4
+dep_inaka_mixer = hex 0.1.5
 dep_gun    = git https://github.com/ninenines/gun.git     427230d
-dep_katana = git git://github.com/inaka/erlang-katana.git 0.2.14
-dep_cowboy = git git://github.com/ninenines/cowboy.git    1.0.4
-dep_mixer  = git git://github.com/inaka/mixer.git         0.1.4
 dep_lasse  = git git://github.com/inaka/lasse.git         1.0.1
 dep_sync   = git git://github.com/inaka/sync.git          0.1.3
 
