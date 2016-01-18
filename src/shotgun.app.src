@@ -13,7 +13,10 @@
   {registered, []},
   {maintainers, ["Inaka"]},
   {licenses, ["Apache 2.0"]},
-  {links, [{"Github", "https://github.com/inaka/shotgun"}]},
-  {build_tools, ["make", "rebar"]}
+  {links, [ {"Github", "https://github.com/inaka/shotgun"}
+          , {"Docs", "http://inaka.github.io/shotgun/"}
+          , {"SSE Spec", "https://html.spec.whatwg.org/multipage/comms.html#server-sent-events"}
+          ]},
+  {build_tools, ["erlang.mk", "rebar"]}
  ]
 }.
