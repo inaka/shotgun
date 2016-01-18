@@ -1,5 +1,16 @@
 # Change Log
 
+## [0.2.0](https://github.com/inaka/shotgun/tree/0.2.0) (2016-01-18)
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.1.15...0.2.0)
+
+**Closed issues:**
+
+- Hex Package [\#122](https://github.com/inaka/shotgun/issues/122)
+
+**Merged pull requests:**
+
+- Update README URLs based on HTTP redirects [\#139](https://github.com/inaka/shotgun/pull/139) ([ReadmeCritic](https://github.com/ReadmeCritic))
+
 ## [0.1.15](https://github.com/inaka/shotgun/tree/0.1.15) (2016-01-05)
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.12...0.1.15)
 
@@ -29,6 +40,7 @@
 
 **Merged pull requests:**
 
+- \[\#136\] Version bump to 0.1.15 [\#137](https://github.com/inaka/shotgun/pull/137) ([davecaos](https://github.com/davecaos))
 - \[\#122\] Updated to upload in hex.pm [\#135](https://github.com/inaka/shotgun/pull/135) ([davecaos](https://github.com/davecaos))
 - \[\#102\] Allow proplist headers [\#133](https://github.com/inaka/shotgun/pull/133) ([tothlac](https://github.com/tothlac))
 - \[Closes \#98\] Added tests and improved code [\#131](https://github.com/inaka/shotgun/pull/131) ([jfacorro](https://github.com/jfacorro))
