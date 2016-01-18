@@ -18,8 +18,8 @@ init(_Transport, Req, _Opts) ->
     {_, _} ->
       Headers = [{<<"content-type">>, <<"text/html">>}],
       StatusCode = 405, % Method not Allowed
-      cowboy_req:reply(StatusCode, Headers, Req),
-      {shutdown, Req, 0}
+      {ok, Req1} = cowboy_req:reply(StatusCode, Headers, Req),
+      {shutdown, Req1, 0}
   end.
 
 -spec info(term(), cowboy_req:req(), integer()) ->
@@ -29,7 +29,7 @@ info(count, Req, Count) ->
     true  ->
           {ok, Req, 0};
     false ->
-          cowboy_req:chunk(integer_to_binary(Count), Req),
+          ok = cowboy_req:chunk(integer_to_binary(Count), Req),
           shotgun_test_utils:auto_send(count),
           {loop, Req, Count + 1}
   end.
