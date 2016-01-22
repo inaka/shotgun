@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.2.3](https://github.com/inaka/shotgun/tree/0.2.3) (2016-01-22)
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.2.2...0.2.3)
+
+**Merged pull requests:**
+
+- \[Fix \#114\] update cowboy and cowlib version [\#145](https://github.com/inaka/shotgun/pull/145) ([Euen](https://github.com/Euen))
+
 ## [0.2.2](https://github.com/inaka/shotgun/tree/0.2.2) (2016-01-20)
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.2.0...0.2.2)
 
