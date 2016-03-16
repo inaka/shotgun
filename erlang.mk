@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-74-g68423ac
+ERLANG_MK_VERSION = 2.0.0-pre.2-88-g865bc1f
 
 # Core configuration.
 
@@ -1843,6 +1843,14 @@ pkg_gen_unix_fetch = git
 pkg_gen_unix_repo = https://github.com/msantos/gen_unix
 pkg_gen_unix_commit = master
 
+PACKAGES += geode
+pkg_geode_name = geode
+pkg_geode_description = geohash/proximity lookup in pure, uncut erlang.
+pkg_geode_homepage = https://github.com/bradfordw/geode
+pkg_geode_fetch = git
+pkg_geode_repo = https://github.com/bradfordw/geode
+pkg_geode_commit = master
+
 PACKAGES += getopt
 pkg_getopt_name = getopt
 pkg_getopt_description = Module to parse command line arguments using the GNU getopt syntax
@@ -2070,9 +2078,9 @@ pkg_jerg_commit = master
 PACKAGES += jesse
 pkg_jesse_name = jesse
 pkg_jesse_description = jesse (JSon Schema Erlang) is an implementation of a json schema validator for Erlang.
-pkg_jesse_homepage = https://github.com/klarna/jesse
+pkg_jesse_homepage = https://github.com/for-GET/jesse
 pkg_jesse_fetch = git
-pkg_jesse_repo = https://github.com/klarna/jesse
+pkg_jesse_repo = https://github.com/for-GET/jesse
 pkg_jesse_commit = master
 
 PACKAGES += jiffy
@@ -2123,6 +2131,14 @@ pkg_json_rec_fetch = git
 pkg_json_rec_repo = https://github.com/justinkirby/json_rec
 pkg_json_rec_commit = master
 
+PACKAGES += jsone
+pkg_jsone_name = jsone
+pkg_jsone_description = An Erlang library for encoding, decoding JSON data.
+pkg_jsone_homepage = https://github.com/sile/jsone.git
+pkg_jsone_fetch = git
+pkg_jsone_repo = https://github.com/sile/jsone.git
+pkg_jsone_commit = master
+
 PACKAGES += jsonerl
 pkg_jsonerl_name = jsonerl
 pkg_jsonerl_description = yet another but slightly different erlang <-> json encoder/decoder
@@ -2162,6 +2178,14 @@ pkg_kafka_homepage = https://github.com/wooga/kafka-erlang
 pkg_kafka_fetch = git
 pkg_kafka_repo = https://github.com/wooga/kafka-erlang
 pkg_kafka_commit = master
+
+PACKAGES += kafka_protocol
+pkg_kafka_protocol_name = kafka_protocol
+pkg_kafka_protocol_description = Kafka protocol Erlang library
+pkg_kafka_protocol_homepage = https://github.com/klarna/kafka_protocol
+pkg_kafka_protocol_fetch = git
+pkg_kafka_protocol_repo = https://github.com/klarna/kafka_protocol.git
+pkg_kafka_protocol_commit = master
 
 PACKAGES += kai
 pkg_kai_name = kai
@@ -3435,6 +3459,14 @@ pkg_skel_fetch = git
 pkg_skel_repo = https://github.com/ParaPhrase/skel
 pkg_skel_commit = master
 
+PACKAGES += slack
+pkg_slack_name = slack
+pkg_slack_description = Minimal slack notification OTP library.
+pkg_slack_homepage = https://github.com/DonBranson/slack
+pkg_slack_fetch = git
+pkg_slack_repo = https://github.com/DonBranson/slack.git
+pkg_slack_commit = 1.0.0
+
 PACKAGES += smother
 pkg_smother_name = smother
 pkg_smother_description = Extended code coverage metrics for Erlang.
@@ -4346,9 +4378,9 @@ define dep_autopatch_rebar.erl
 		[] -> ok;
 		_ ->
 			Write("\npre-app::\n\t$$\(MAKE) -f c_src/Makefile.erlang.mk\n"),
-			PortSpecWrite(io_lib:format("ERL_CFLAGS = -finline-functions -Wall -fPIC -I ~s/erts-~s/include -I ~s\n",
+			PortSpecWrite(io_lib:format("ERL_CFLAGS = -finline-functions -Wall -fPIC -I \\"~s/erts-~s/include\\" -I \\"~s\\"\n",
 				[code:root_dir(), erlang:system_info(version), code:lib_dir(erl_interface, include)])),
-			PortSpecWrite(io_lib:format("ERL_LDFLAGS = -L ~s -lerl_interface -lei\n",
+			PortSpecWrite(io_lib:format("ERL_LDFLAGS = -L \\"~s\\" -lerl_interface -lei\n",
 				[code:lib_dir(erl_interface, lib)])),
 			[PortSpecWrite(["\n", E, "\n"]) || E <- OsEnv],
 			FilterEnv = fun(Env) ->
@@ -5099,8 +5131,12 @@ define compat_erlc_opts_to_list
 endef
 
 define compat_rebar_config
-{deps, [$(call comma_list,$(foreach d,$(DEPS),\
-	{$(call dep_name,$d),".*",{git,"$(call dep_repo,$d)","$(call dep_commit,$d)"}}))]}.
+{deps, [
+$(call comma_list,$(foreach d,$(DEPS),\
+	$(if $(filter hex,$(call dep_fetch,$d)),\
+		{$(call dep_name,$d)$(comma)"$(call dep_repo,$d)"},\
+		{$(call dep_name,$d)$(comma)".*"$(comma){git,"$(call dep_repo,$d)"$(comma)"$(call dep_commit,$d)"}})))
+]}.
 {erl_opts, $(call compat_erlc_opts_to_list,$(ERLC_OPTS))}.
 endef
 
@@ -5170,8 +5206,8 @@ help::
 		"  bootstrap          Generate a skeleton of an OTP application" \
 		"  bootstrap-lib      Generate a skeleton of an OTP library" \
 		"  bootstrap-rel      Generate the files needed to build a release" \
-		"  new-app n=NAME     Create a new local OTP application NAME" \
-		"  new-lib n=NAME     Create a new local OTP library NAME" \
+		"  new-app in=NAME    Create a new local OTP application NAME" \
+		"  new-lib in=NAME    Create a new local OTP library NAME" \
 		"  new t=TPL n=NAME   Generate a module NAME based on the template TPL" \
 		"  new t=T n=N in=APP Generate a module NAME based on the template TPL in APP" \
 		"  list-templates     List available templates"
@@ -5645,6 +5681,7 @@ ifeq ($(PLATFORM),msys2)
 # We hardcode the compiler used on MSYS2. The default CC=cc does
 # not produce working code. The "gcc" MSYS2 package also doesn't.
 	CC = /mingw64/bin/gcc
+	export CC
 	CFLAGS ?= -O3 -std=c99 -finline-functions -Wall -Wmissing-prototypes
 	CXXFLAGS ?= -O3 -finline-functions -Wall
 else ifeq ($(PLATFORM),darwin)
@@ -5955,12 +5992,18 @@ ct: $(if $(IS_APP),,apps-ct)
 else
 ct: test-build $(if $(IS_APP),,apps-ct)
 	$(verbose) mkdir -p $(CURDIR)/logs/
-	$(gen_verbose) $(CT_RUN) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS)
+	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS)
 endif
 
 ifneq ($(ALL_APPS_DIRS),)
-apps-ct:
-	$(verbose) for app in $(ALL_APPS_DIRS); do $(MAKE) -C $$app ct IS_APP=1; done
+define ct_app_target
+apps-ct-$1:
+	$(MAKE) -C $1 ct IS_APP=1
+endef
+
+$(foreach app,$(ALL_APPS_DIRS),$(eval $(call ct_app_target,$(app))))
+
+apps-ct: $(addprefix apps-ct-,$(ALL_APPS_DIRS))
 endif
 
 ifndef t
@@ -5977,7 +6020,7 @@ endif
 define ct_suite_target
 ct-$(1): test-build
 	$(verbose) mkdir -p $(CURDIR)/logs/
-	$(gen_verbose) $(CT_RUN) -suite $(addsuffix _SUITE,$(1)) $(CT_EXTRA) $(CT_OPTS)
+	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(1)) $(CT_EXTRA) $(CT_OPTS)
 endef
 
 $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
