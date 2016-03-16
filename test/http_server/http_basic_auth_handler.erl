@@ -1,6 +1,6 @@
 -module(http_basic_auth_handler).
 
--include_lib("inaka_mixer/include/mixer.hrl").
+-include_lib("mixer/include/mixer.hrl").
 -mixin([{ http_base_handler,
           [ init/3
           , rest_init/2
