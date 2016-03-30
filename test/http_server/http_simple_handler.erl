@@ -4,8 +4,7 @@
 -mixin([
         {http_base_handler,
          [
-          init/3,
-          rest_init/2,
+          init/2,
           content_types_accepted/2,
           content_types_provided/2,
           resource_exists/2
@@ -44,10 +43,10 @@ handle_get(Req, State) ->
 
 handle_post(Req, State) ->
   {ok, Data, Req1} = cowboy_req:body(Req),
-  {Method, Req2} = cowboy_req:method(Req1),
+  Method = cowboy_req:method(Req1),
   Body = [Method, <<": ">>, Data],
-  Req3 = cowboy_req:set_resp_body(Body, Req2),
-  {true, Req3, State}.
+  Req2 = cowboy_req:set_resp_body(Body, Req1),
+  {true, Req2, State}.
 
 delete_resource(Req, State) ->
   {true, Req, State}.

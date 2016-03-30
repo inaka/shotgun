@@ -1,13 +1,13 @@
 -module(http_binary_handler).
 
--export([ init/3
+-export([ init/2
         , info/3
         , terminate/3
         ]).
 
--spec init(any(), cowboy_req:req(), any()) ->
+-spec init(cowboy_req:req(), any()) ->
   {loop | shutdown, any(), integer()}.
-init(_Transport, Req, _Opts) ->
+init(Req, _Opts) ->
   case cowboy_req:method(Req) of
     {<<"GET">>, Req1} ->
       Headers = [{<<"content-type">>, <<"text/event-stream">>},
