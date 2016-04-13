@@ -95,8 +95,7 @@ get_binary(Config) ->
 
     timer:sleep(500),
 
-    [Chunk1, Chunk2, Fin] = shotgun:events(Conn),
-
+    [Chunk1, Chunk2, Fin]  = shotgun:events(Conn),
     {nofin, Ref, <<"1">>} = Chunk1,
     {nofin, Ref, <<"2">>} = Chunk2,
     {fin, Ref, <<>>} = Fin,
@@ -115,7 +114,6 @@ work_queue(Config) ->
     ct:comment("Queued GET should return a ref as well"),
     {ok, Response} = shotgun:get(Conn, <<"/">>),
     #{status_code := 200} = Response,
-
     ct:comment("Events frmo the async GET should be there"),
     Events = shotgun:events(Conn),
     21 = length(Events), %% 20 nofin + 1 fin
@@ -154,7 +152,6 @@ get_handle_event(Config) ->
                , handle_event => HandleEventBin
                },
     {ok, _RefBin} = shotgun:get(Conn, <<"/chunked-binary">>, #{}, OptsBin),
-
     timer:sleep(500),
 
     ok = shotgun_test_utils:wait_receive(<<"1">>, 500),

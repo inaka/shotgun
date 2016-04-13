@@ -20,7 +20,10 @@ content_types_provided(Req, State) ->
               <<"HEAD">> -> handle_head;
               _ -> handle_get
             end,
-  {[{<<"text/plain">>, Handler}], Req, State}.
+  {[
+    {{<<"text">>, <<"plain">>, []}, Handler},
+    {{<<"text">>, <<"html">>, []}, Handler}
+  ], Req, State}.
 
 forbidden(Req, State) ->
   {false, Req, State}.
