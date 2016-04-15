@@ -7,7 +7,7 @@ BUILD_DEPS = inaka_mk hexer_mk
 TEST_DEPS  = katana_test cowboy mixer lasse
 SHELL_DEPS = sync
 
-dep_cowlib      = hex 1.0.2
+dep_cowlib      = git https://github.com/ninenines/cowlib.git  1.0.1
 dep_gun         = hex 1.0.0-pre.1
 dep_katana_test = git https://github.com/inaka/katana-test.git 0.0.3
 dep_mixer       = git https://github.com/inaka/mixer.git       0.1.5
