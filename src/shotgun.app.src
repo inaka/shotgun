@@ -17,6 +17,6 @@
           , {"Docs", "http://inaka.github.io/shotgun/"}
           , {"SSE Spec", "https://html.spec.whatwg.org/multipage/comms.html#server-sent-events"}
           ]},
-  {build_tools, ["erlang.mk", "rebar"]}
+  {build_tools, ["rebar"]}
  ]
 }.
