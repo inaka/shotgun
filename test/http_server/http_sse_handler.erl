@@ -4,14 +4,14 @@
 -dialyzer(no_undefined_callbacks).
 
 -export([
-         init/2,
+         init/3,
          handle_notify/2,
          handle_info/2,
          handle_error/3,
          terminate/3
         ]).
 
-init(_LastEventId, Req) ->
+init(_InitArgs, _LastEventId, Req) ->
   shotgun_test_utils:auto_send(ping),
   CountBin = cowboy_req:binding(count, Req, <<"2">>),
   case binary_to_integer(CountBin) of
