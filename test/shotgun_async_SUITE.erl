@@ -95,7 +95,7 @@ get_binary(Config) ->
 
     timer:sleep(500),
 
-    [Chunk1, Chunk2, Fin]  = shotgun:events(Conn),
+    [Chunk1, Chunk2, Fin] = shotgun:events(Conn),
     {nofin, Ref, <<"1">>} = Chunk1,
     {nofin, Ref, <<"2">>} = Chunk2,
     {fin, Ref, <<>>} = Fin,

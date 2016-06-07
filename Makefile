@@ -8,7 +8,7 @@ TEST_DEPS  = katana_test cowboy mixer lasse
 SHELL_DEPS = sync
 
 
-dep_gun         = git https://github.com/ninenines/gun.git     d88f3675d
+dep_gun         = hex 1.0.0-pre.1
 dep_katana_test = git https://github.com/inaka/katana-test.git 0.0.3
 dep_mixer       = git https://github.com/inaka/mixer.git       0.1.5
 dep_cowboy      = git https://github.com/ninenines/cowboy.git  2.0.0-pre.3
