@@ -170,14 +170,14 @@ shotgun:parse_event(<<"data: pong\ndata: ping\nid: 1\nevent: pinging">>).
 To build **shotgun** just run the following on your command shell:
 
 ```sh
-make
+rebar3 compile
 ```
 
 To start up a shell where you can try things out run the following (after
 building the project as described above):
 
 ```sh
-make shell
+rebar3 shell
 ```
 
 ## Contact Us
