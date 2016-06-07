@@ -2,17 +2,17 @@ PROJECT = shotgun
 
 CONFIG = rel/sys.config
 
-DEPS       = cowlib gun
+DEPS       = gun
 BUILD_DEPS = inaka_mk hexer_mk
 TEST_DEPS  = katana_test cowboy mixer lasse
 SHELL_DEPS = sync
 
-dep_cowlib      = hex 1.0.2
+
 dep_gun         = hex 1.0.0-pre.1
 dep_katana_test = git https://github.com/inaka/katana-test.git 0.0.3
 dep_mixer       = git https://github.com/inaka/mixer.git       0.1.5
-dep_cowboy      = hex 1.0.4
-dep_lasse       = git https://github.com/inaka/lasse.git       1.0.1
+dep_cowboy      = git https://github.com/ninenines/cowboy.git  2.0.0-pre.3
+dep_lasse       = git https://github.com/inaka/lasse.git       cowboy2
 dep_sync        = git https://github.com/rustyio/sync.git      11df81d
 dep_inaka_mk    = git https://github.com/inaka/inaka.mk.git    1.0.0
 dep_hexer_mk    = git https://github.com/inaka/hexer.mk.git    1.1.0

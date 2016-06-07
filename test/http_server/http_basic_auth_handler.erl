@@ -2,8 +2,7 @@
 
 -include_lib("mixer/include/mixer.hrl").
 -mixin([{ http_base_handler,
-          [ init/3
-          , rest_init/2
+          [ init/2
           , content_types_accepted/2
           , content_types_provided/2
           , resource_exists/2
@@ -21,10 +20,9 @@ allowed_methods(Req, State) ->
 
 is_authorized(Req, State) ->
     case cowboy_req:parse_header(<<"authorization">>, Req) of
-        {ok, {<<"basic">>, {<<"user">>, <<"pass">>}}, Req2} ->
-            {true, Req2, State};
-        {_, _, Req2} ->
-            {{false, <<>>}, Req2, State}
+        {basic, <<"user">>, <<"pass">>} ->
+            {true, Req, State};
+        _WhenOthers -> {{false, <<>>}, Req, State}
     end.
 
 %% internal

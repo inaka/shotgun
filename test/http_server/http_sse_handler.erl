@@ -13,10 +13,10 @@
 
 init(_InitArgs, _LastEventId, Req) ->
   shotgun_test_utils:auto_send(ping),
-  {CountBin, Req1} = cowboy_req:binding(count, Req, <<"2">>),
+  CountBin = cowboy_req:binding(count, Req, <<"2">>),
   case binary_to_integer(CountBin) of
-    0     -> {no_content, Req1, {0, 0}};
-    Count -> {ok, Req1, {1, Count + 1}}
+    0     -> {no_content, Req, {0, 0}};
+    Count -> {ok, Req, {1, Count + 1}}
   end.
 
 handle_notify(ping, State) ->

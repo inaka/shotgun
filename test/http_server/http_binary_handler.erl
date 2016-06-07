@@ -1,37 +1,37 @@
 -module(http_binary_handler).
 
--export([ init/3
+-export([ init/2
         , info/3
         , terminate/3
         ]).
 
--spec init(any(), cowboy_req:req(), any()) ->
-  {loop | shutdown, any(), integer()}.
-init(_Transport, Req, _Opts) ->
+-spec init(cowboy_req:req(), any()) ->
+  {ok | cowboy_loop, any(), integer()}.
+init(Req, _Opts) ->
   case cowboy_req:method(Req) of
-    {<<"GET">>, Req1} ->
+    <<"GET">>  ->
       Headers = [{<<"content-type">>, <<"text/event-stream">>},
                  {<<"cache-control">>, <<"no-cache">>}],
-      {ok, Req2} = cowboy_req:chunked_reply(200, Headers, Req1),
+      Req1 = cowboy_req:chunked_reply(200, Headers, Req),
       shotgun_test_utils:auto_send(count),
-      {loop, Req2, 1};
-    {_, _} ->
+      {cowboy_loop, Req1, 1};
+    _OtherMethod ->
       Headers = [{<<"content-type">>, <<"text/html">>}],
       StatusCode = 405, % Method not Allowed
-      {ok, Req1} = cowboy_req:reply(StatusCode, Headers, Req),
-      {shutdown, Req1, 0}
+      Req1 = cowboy_req:reply(StatusCode, Headers, Req),
+      {ok, Req1, 0}
   end.
 
 -spec info(term(), cowboy_req:req(), integer()) ->
-    {loop, cowboy_req:req(), integer()}.
+    {ok, cowboy_req:req(), integer()}.
 info(count, Req, Count) ->
   case Count > 2 of
     true  ->
-          {ok, Req, 0};
+          {stop, Req, 0};
     false ->
           ok = cowboy_req:chunk(integer_to_binary(Count), Req),
           shotgun_test_utils:auto_send(count),
-          {loop, Req, Count + 1}
+         {ok, Req, Count + 1}
   end.
 
 
