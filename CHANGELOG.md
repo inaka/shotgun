@@ -1,10 +1,32 @@
 # Change Log
 
+## [0.3.0](https://github.com/inaka/shotgun/tree/0.3.0) (2016-06-08)
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.2.3...0.3.0)
+
+**Implemented enhancements:**
+
+- Version Bump  0.1.15 [\#136](https://github.com/inaka/shotgun/issues/136)
+
+**Closed issues:**
+
+- Move from erlang.mk to rebar3 [\#155](https://github.com/inaka/shotgun/issues/155)
+- can't build [\#153](https://github.com/inaka/shotgun/issues/153)
+- Update repo and make it ready for hex.pm [\#148](https://github.com/inaka/shotgun/issues/148)
+- Version Bump 0.2.3 [\#146](https://github.com/inaka/shotgun/issues/146)
+- Fix shotgun test \(they were broken because new version bump 0.2.1\) [\#144](https://github.com/inaka/shotgun/issues/144)
+
+**Merged pull requests:**
+
+- \[Close \#155\] Euen.155.rebar3 [\#156](https://github.com/inaka/shotgun/pull/156) ([Euen](https://github.com/Euen))
+- Dave.151.update.deps.to.2.0.0.pre [\#152](https://github.com/inaka/shotgun/pull/152) ([davecaos](https://github.com/davecaos))
+- \[Fix \#148\] Update dependencies; Update erlang.mk; Add ruleset to elvis.config [\#150](https://github.com/inaka/shotgun/pull/150) ([harenson](https://github.com/harenson))
+
 ## [0.2.3](https://github.com/inaka/shotgun/tree/0.2.3) (2016-01-22)
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.2.2...0.2.3)
 
 **Merged pull requests:**
 
+- \[Close \#146\] version bump [\#147](https://github.com/inaka/shotgun/pull/147) ([Euen](https://github.com/Euen))
 - \[Fix \#114\] update cowboy and cowlib version [\#145](https://github.com/inaka/shotgun/pull/145) ([Euen](https://github.com/Euen))
 
 ## [0.2.2](https://github.com/inaka/shotgun/tree/0.2.2) (2016-01-20)
