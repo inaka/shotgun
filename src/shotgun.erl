@@ -152,9 +152,11 @@ open(Host, Port, Opts) when is_map(Opts) ->
 %% transport options.
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type(),
            Opts :: open_opts()) ->
-    {ok, pid()} | {error, gun_open_failed, gun_open_timeout}.
+    {ok, pid()} | {ok, pid(), term()} |
+    {error, already_present | {already_started, pid()} |
+            gun_open_failed | gun_open_timeout}.
 open(Host, Port, Type, Opts) ->
-    supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
+    supervisor:start_child(shotgun_sup, [{Host, Port, Type, Opts}]).
 
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
@@ -333,12 +335,23 @@ parse_event(EventBin) ->
 %% gen_fsm callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--type state() :: #{}.
+-type state() :: #{ async            := boolean()
+                  , async_mode       := false | binary | sse
+                  , buffer           := binary()
+                  , data             := binary()
+                  , from             := term()
+                  , handle_event     := term()
+                  , headers          := term()
+                  , pending_requests := queue:queue() | undefined
+                  , pid              := pid() | undefined
+                  , responses        := queue:queue() | undefined
+                  , status_code      := integer() | undefined
+                  , stream           := reference() | undefined}.
 
 %% @private
--spec init([term()]) ->
+-spec init([{string(), integer(), connection_type(), open_opts()}]) ->
     {ok, at_rest, state()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
-init([Host, Port, Type, Opts]) ->
+init([{Host, Port, Type, Opts}]) ->
     GunType = case Type of
                   http -> tcp;
                   https -> ssl
@@ -416,7 +429,9 @@ terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @private
--spec at_rest(term(), pid(), term()) -> term().
+-spec at_rest(term(), pid(), state()) ->
+    {stop, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
 at_rest(Event, From, State) ->
     enqueue_work_or_stop(at_rest, Event, From, State).
 
@@ -431,12 +446,16 @@ wait_response(Event, From, State) ->
     enqueue_work_or_stop(wait_response, Event, From, State).
 
 %% @private
--spec receive_data(term(), pid(), term()) -> term().
+-spec receive_data(term(), pid(), term()) ->
+    {stop, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
 receive_data(Event, From, State) ->
     enqueue_work_or_stop(receive_data, Event, From, State).
 
 %% @private
--spec receive_chunk(term(), pid(), term()) -> term().
+-spec receive_chunk(term(), pid(), term()) ->
+    {stop, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
 receive_chunk(Event, From, State) ->
     enqueue_work_or_stop(receive_chunk, Event, From, State).
 
@@ -480,7 +499,9 @@ at_rest({HttpVerb, {_, _, Body} = Args, From}, State = #{pid := Pid}) ->
     {next_state, wait_response, NewState}.
 
 %% @private
--spec wait_response(term(), term()) -> term().
+-spec wait_response(term(), term()) ->
+    {stop, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
 wait_response({'DOWN', _, _, _, Reason}, _State) ->
     exit(Reason);
 wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
@@ -516,7 +537,9 @@ wait_response(Event, State) ->
 
 %% @private
 %% @doc Regular response
--spec receive_data(term(), term()) -> term().
+-spec receive_data(term(), term()) ->
+    {stop, {error, any()}, atom(), state()} |
+    {next_state, atom(), state(), timeout()}.
 receive_data({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_data({gun_data, _Pid, StreamRef, nofin, Data},
@@ -539,7 +562,7 @@ receive_data({gun_error, _Pid, StreamRef, _Reason},
 
 %% @private
 %% @doc Chunked data response
--spec receive_chunk(term(), term()) -> term().
+-spec receive_chunk(term(), state()) -> term().
 receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
     error(incomplete);
 receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data}, State) ->
@@ -558,12 +581,12 @@ receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @private
--spec clean_state() -> map().
+-spec clean_state() -> state().
 clean_state() ->
     clean_state(#{}).
 
 %% @private
--spec clean_state(map()) -> map(); (queue:queue()) -> map().
+-spec clean_state(map()) -> state().
 clean_state(State) ->
     Responses = maps:get(responses, State, queue:new()),
     Requests  = maps:get(pending_requests, State, queue:new()),
@@ -662,7 +685,9 @@ basic_auth_header(Headers) ->
     end.
 
 %% @private
--spec encode_basic_auth(string(), string()) -> binary().
+-type ascii_string() :: [1..255].
+
+-spec encode_basic_auth(ascii_string(), ascii_string()) -> binary().
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
