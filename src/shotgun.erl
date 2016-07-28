@@ -84,7 +84,7 @@
 -type connection() :: pid().
 -type http_verb()  :: get | post | head | delete | patch | put | options.
 -type uri()        :: iodata().
--type headers()    :: #{} | proplists:proplist().
+-type headers()    :: #{_ => _} | proplists:proplist().
 -type body()       :: iodata() | body_chunked.
 -type options()    ::
         #{ async => boolean()
@@ -124,7 +124,7 @@ stop() ->
 -spec start_link(string(), integer(), connection_type(), open_opts()) ->
     {ok, pid()} | ignore | {error, term()}.
 start_link(Host, Port, Type, Opts) ->
-    gen_fsm:start_link(shotgun, [Host, Port, Type, Opts], []).
+    gen_fsm:start_link(shotgun, [{Host, Port, Type, Opts}], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API
@@ -156,7 +156,7 @@ open(Host, Port, Opts) when is_map(Opts) ->
     {error, already_present | {already_started, pid()} |
             gun_open_failed | gun_open_timeout}.
 open(Host, Port, Type, Opts) ->
-    supervisor:start_child(shotgun_sup, [{Host, Port, Type, Opts}]).
+    supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
 
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
