@@ -123,7 +123,7 @@ response. **It currently only works for GET requests.**. Default value is
 `false`.
 
 - `async_data :: binary | sse`: when `async` is `true` the mode specifies
-how the data received will be processed. `binary` mode treats eat chunk received
+how the data received will be processed. `binary` mode treats each chunk received
 as raw binary. `sse` mode buffers each chunk, splitting the data received into
 SSE. Default value is `binary`.
 
