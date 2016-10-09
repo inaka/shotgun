@@ -122,14 +122,14 @@ entries:
 response. **It currently only works for GET requests.**. Default value is
 `false`.
 
-- `async_data :: binary | sse`: when `async` is `true` the mode specifies
+- `async_mode :: binary | sse`: when `async` is `true` the mode specifies
 how the data received will be processed. `binary` mode treats each chunk received
 as raw binary. `sse` mode buffers each chunk, splitting the data received into
 SSE. Default value is `binary`.
 
 - `handle_event :: fun((fin | nofin, reference(), binary()) -> any())`: this function
-will be called each time either a chunk is received (`async_data` = `binary`) or
-an event is parsed (`async_data` = `sse`). If no handle_event function is
+will be called each time either a chunk is received (`async_mode` = `binary`) or
+an event is parsed (`async_mode` = `sse`). If no handle_event function is
 provided the data received is added to a queue, whose values can be obtained
 calling the `shotgun:events/1`. Default value is `undefined`.
 
