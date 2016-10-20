@@ -335,18 +335,18 @@ parse_event(EventBin) ->
 %% gen_fsm callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--type state() :: #{ async            := boolean()
-                  , async_mode       := false | binary | sse
-                  , buffer           := binary()
-                  , data             := binary()
-                  , from             := term()
-                  , handle_event     := term()
-                  , headers          := term()
-                  , pending_requests := queue:queue() | undefined
-                  , pid              := pid() | undefined
-                  , responses        := queue:queue() | undefined
-                  , status_code      := integer() | undefined
-                  , stream           := reference() | undefined}.
+-type state() :: #{ async            => boolean()
+                  , async_mode       => false | binary | sse
+                  , buffer           => binary()
+                  , data             => binary()
+                  , from             => term()
+                  , handle_event     => term()
+                  , headers          => term()
+                  , pending_requests => queue:queue() | undefined
+                  , pid              => pid() | undefined
+                  , responses        => queue:queue() | undefined
+                  , status_code      => integer() | undefined
+                  , stream           => reference() | undefined}.
 
 %% @private
 -spec init([{string(), integer(), connection_type(), open_opts()}]) ->
