@@ -1,0 +1,8 @@
+case erlang:function_exported(rebar3, main, 1) of
+    true -> % rebar3
+        CONFIG;
+    false -> % rebar 2.x
+        [{deps, [
+            {gun, ".*", {git, "git://github.com/ninenines/gun.git", "1.0.0-pre.1"}}
+        ]} | lists:keydelete(deps, 1, CONFIG)]
+end.
