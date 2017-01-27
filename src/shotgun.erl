@@ -473,7 +473,7 @@ at_rest(timeout, State) ->
     end;
 at_rest({get_async, {HandleEvent, AsyncMode}, Args, From},
         State = #{pid := Pid}) ->
-    StreamRef = do_http_verb(get, Pid, Args),
+    StreamRef = do_http_verb(get, Pid, add_last_event_id(State, Args)),
     CleanState = clean_state(State),
     NewState = CleanState#{
                  from => From,
@@ -485,7 +485,7 @@ at_rest({get_async, {HandleEvent, AsyncMode}, Args, From},
                 },
     {next_state, wait_response, NewState};
 at_rest({HttpVerb, {_, _, Body} = Args, From}, State = #{pid := Pid}) ->
-    StreamRef = do_http_verb(HttpVerb, Pid, Args),
+    StreamRef = do_http_verb(HttpVerb, Pid, add_last_event_id(State, Args)),
     CleanState = clean_state(State),
     NewState = CleanState#{ pid    => Pid
                           , stream => StreamRef
@@ -634,7 +634,7 @@ manage_chunk(IsFin, StreamRef, Data,
                      queue:in({IsFin, StreamRef, Event}, Acc)
              end,
     NewResponses = lists:foldl(FunAdd, Responses, Events),
-    NewState#{responses => NewResponses};
+    set_event_id(NewState#{responses => NewResponses}, Data);
 manage_chunk(IsFin, StreamRef, Data,
              State = #{handle_event := HandleEvent,
                        async_mode := binary}) ->
@@ -647,7 +647,7 @@ manage_chunk(IsFin, StreamRef, Data,
     Fun = fun (Event) -> HandleEvent(IsFin, StreamRef, Event) end,
     lists:foreach(Fun, Events),
 
-    NewState.
+    set_event_id(NewState, Data).
 
 %% @private
 -spec process_options(map(), headers(), http_verb()) -> map().
@@ -772,3 +772,24 @@ get_work(State) ->
 append_work(Work, State) ->
     #{pending_requests := PendingReqs} = State,
     State#{pending_requests := queue:in(Work, PendingReqs)}.
+
+%% @private
+-spec add_last_event_id(state(),
+                        {binary(), list(), atom() | iodata()}) ->
+    {binary(), list({binary(), iodata()}), atom() | iodata()}.
+add_last_event_id(#{last_event_id := LID, async := true,
+                    async_mode := sse} = _State, {Req, Headers, Body}) ->
+    {Req, [{<<"Last-Event-Id">>, LID} | Headers], Body};
+add_last_event_id(_State, Args) ->
+    Args.
+
+%% @private
+-spec set_event_id(state(), binary()) -> state().
+set_event_id(State, Data) ->
+    Event = parse_event(Data),
+    case Event of
+        #{id := Id} ->
+            State#{last_event_id => Id};
+        _ ->
+            State
+    end.
