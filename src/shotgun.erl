@@ -357,7 +357,9 @@ init([{Host, Port, Type, Opts}]) ->
                   https -> ssl
               end,
     TransportOpts = maps:get(transport_opts, Opts, []),
-    GunOpts = #{transport      => GunType,
+    BasicGunOpts = maps:get(gun_opts, Opts, #{}),
+    GunOpts = BasicGunOpts#{
+                transport      => GunType,
                 retry          => 1,
                 retry_timeout  => 1,
                 transport_opts => TransportOpts
