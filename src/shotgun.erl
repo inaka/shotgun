@@ -357,11 +357,14 @@ init([{Host, Port, Type, Opts}]) ->
                   https -> ssl
               end,
     TransportOpts = maps:get(transport_opts, Opts, []),
-    GunOpts = #{transport      => GunType,
+    PassedGunOpts = maps:get(gun_opts, Opts, #{}),
+    DefaultGunOpts = #{
+                transport      => GunType,
                 retry          => 1,
                 retry_timeout  => 1,
                 transport_opts => TransportOpts
                },
+    GunOpts = maps:merge(DefaultGunOpts, PassedGunOpts),
     Timeout = maps:get(timeout, Opts, 5000),
     {ok, Pid} = gun:open(Host, Port, GunOpts),
     case gun:await_up(Pid, Timeout) of
