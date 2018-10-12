@@ -41,23 +41,14 @@ start_phase(start_cowboy_http, _StartType, []) ->
         [{ '_'
          , [ {"/",                     http_simple_handler, []}
            , {"/basic-auth",           http_basic_auth_handler, []}
-
            , {"/chunked-sse[/:count]", lasse_handler, [http_sse_handler]}
            , {"/chunked-binary",       http_binary_handler, []}
            ]
          }
         ],
   Dispatch = cowboy_router:compile(Routes),
-  RanchOptions = [{port, Port}],
-  CowboyOptions =
-    [
-     {env,
-      [
-       {dispatch, Dispatch}
-      ]},
-     {compress, true},
-     {timeout, 12000}
-    ],
+  TransportOptions = [{port, Port}],
+  ProtocolOptions = #{env => #{dispatch => Dispatch}},
   {ok, _} =
-    cowboy:start_http(http_server, ListenerCount, RanchOptions, CowboyOptions),
+    cowboy:start_clear(http_server, TransportOptions, ProtocolOptions),
   ok.
