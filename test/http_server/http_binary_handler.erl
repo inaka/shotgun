@@ -10,9 +10,11 @@
 init(Req, _Opts) ->
   case cowboy_req:method(Req) of
     <<"GET">>  ->
-      Headers = [{<<"content-type">>, <<"text/event-stream">>},
-                 {<<"cache-control">>, <<"no-cache">>}],
-      Req1 = cowboy_req:chunked_reply(200, Headers, Req),
+      Headers = #{
+        <<"content-type">> => <<"text/event-stream">>,
+        <<"cache-control">> => <<"no-cache">>
+      },
+      Req1 = cowboy_req:stream_reply(200, Headers, Req),
       shotgun_test_utils:auto_send(count),
       {cowboy_loop, Req1, 1};
     _OtherMethod ->
@@ -29,7 +31,7 @@ info(count, Req, Count) ->
     true  ->
           {stop, Req, 0};
     false ->
-          ok = cowboy_req:chunk(integer_to_binary(Count), Req),
+          ok = cowboy_req:stream_body(integer_to_binary(Count), nofin, Req),
           shotgun_test_utils:auto_send(count),
          {ok, Req, Count + 1}
   end.
