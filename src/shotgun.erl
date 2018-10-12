@@ -379,7 +379,10 @@ init([{Host, Port, Type, Opts}]) ->
       %the requested connection. This bubbles up through gun:await_up.
       {error, normal} ->
         {stop, gun_open_failed};
-      {error, {shutdown, nxdomain}} ->
+      %gun can terminate with reason {shutdown, nxdomain}; however, that's not
+      %explicitly specced and makes dialyzer unhappy, so we loosely pattern
+      %match it here.
+      {error, _} ->
         {stop, gun_open_failed}
     end.
 
