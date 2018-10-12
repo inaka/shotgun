@@ -42,7 +42,7 @@ handle_get(Req, State) ->
   {Body, Req, State}.
 
 handle_post(Req, State) ->
-  {ok, Data, Req1} = cowboy_req:body(Req),
+  {ok, Data, Req1} = cowboy_req:read_body(Req),
   Method = cowboy_req:method(Req1),
   Body = [Method, <<": ">>, Data],
   Req2 = cowboy_req:set_resp_body(Body, Req1),
