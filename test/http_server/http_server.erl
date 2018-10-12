@@ -48,16 +48,8 @@ start_phase(start_cowboy_http, _StartType, []) ->
          }
         ],
   Dispatch = cowboy_router:compile(Routes),
-  RanchOptions = [{port, Port}],
-  CowboyOptions =
-    [
-     {env,
-      [
-       {dispatch, Dispatch}
-      ]},
-     {compress, true},
-     {timeout, 12000}
-    ],
+  TransportOptions = [{port, Port}],
+  ProtocolOptions = #{env => #{dispatch => Dispatch}},
   {ok, _} =
-    cowboy:start_http(http_server, ListenerCount, RanchOptions, CowboyOptions),
+    cowboy:start_clear(http_server, TransportOptions, ProtocolOptions),
   ok.
