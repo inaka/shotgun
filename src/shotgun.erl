@@ -367,6 +367,7 @@ init([{Host, Port, Type, Opts}]) ->
     GunOpts = maps:merge(DefaultGunOpts, PassedGunOpts),
     Timeout = maps:get(timeout, Opts, 5000),
     {ok, Pid} = gun:open(Host, Port, GunOpts),
+    _ = monitor(process, Pid),
     case gun:await_up(Pid, Timeout) of
       {ok, _} ->
         State = clean_state(),
@@ -471,6 +472,8 @@ receive_chunk(Event, From, State) ->
 %If we don't, stay in at_rest.
 %% @private
 -spec at_rest(any(), state()) -> {next_state, atom(), state()}.
+at_rest({'DOWN', _, _, _, Reason}, _State) ->
+    exit(Reason);
 at_rest(timeout, State) ->
     case get_work(State) of
         no_work ->
