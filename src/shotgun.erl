@@ -79,6 +79,8 @@
            %% timeout is passed to gun:await_up. Default if not specified
            %% is 5000 ms.
          , timeout => timeout()
+           %% gun_opts are passed to gun:open
+         , gun_opts => gun:opts()
          }.
 
 -type connection() :: pid().
