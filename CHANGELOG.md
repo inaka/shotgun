@@ -1,5 +1,34 @@
 # Change Log
 
+## [0.4.0](https://github.com/inaka/shotgun/tree/0.4.0)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.3.0...0.4.0)
+
+**Fixed bugs:**
+
+- Tests are failing [\#173](https://github.com/inaka/shotgun/issues/173)
+
+**Closed issues:**
+
+- Update to support Dialyzer in erlang 19 [\#160](https://github.com/inaka/shotgun/issues/160)
+- Version Bump to 0.3.0 [\#157](https://github.com/inaka/shotgun/issues/157)
+
+**Merged pull requests:**
+
+- Fix dialyzer warning for gun\_opts [\#177](https://github.com/inaka/shotgun/pull/177) ([unix1](https://github.com/unix1))
+- Monitor gun process, handle DOWN message in at\_rest state [\#176](https://github.com/inaka/shotgun/pull/176) ([unix1](https://github.com/unix1))
+- Update legacy rebar to gun 1.3.0 too [\#175](https://github.com/inaka/shotgun/pull/175) ([unix1](https://github.com/unix1))
+- Upgrade to stable gun, fix tests [\#174](https://github.com/inaka/shotgun/pull/174) ([unix1](https://github.com/unix1))
+- Allow to pass options to gun  [\#172](https://github.com/inaka/shotgun/pull/172) ([michalwski](https://github.com/michalwski))
+- Remove dead hipchat link [\#170](https://github.com/inaka/shotgun/pull/170) ([Euen](https://github.com/Euen))
+- Remove dead hipchat link [\#169](https://github.com/inaka/shotgun/pull/169) ([elbrujohalcon](https://github.com/elbrujohalcon))
+- Compile on erlang 17 and18 [\#166](https://github.com/inaka/shotgun/pull/166) ([michalwski](https://github.com/michalwski))
+- Rewrite deps to work with rebar2 [\#165](https://github.com/inaka/shotgun/pull/165) ([michalwski](https://github.com/michalwski))
+- Update README.md [\#164](https://github.com/inaka/shotgun/pull/164) ([optikfluffel](https://github.com/optikfluffel))
+- Small typo change. [\#163](https://github.com/inaka/shotgun/pull/163) ([hekaldama](https://github.com/hekaldama))
+- Fixes a dialyzer warning and an error on the types sent to start\_link [\#162](https://github.com/inaka/shotgun/pull/162) ([HernanRivasAcosta](https://github.com/HernanRivasAcosta))
+- \[\#160\] Fixed all dialyzer errors [\#161](https://github.com/inaka/shotgun/pull/161) ([HernanRivasAcosta](https://github.com/HernanRivasAcosta))
+
 ## [0.3.0](https://github.com/inaka/shotgun/tree/0.3.0) (2016-06-08)
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.2.3...0.3.0)
 
@@ -17,6 +46,7 @@
 
 **Merged pull requests:**
 
+- \[\#157\] version bump to 0.3.0 [\#158](https://github.com/inaka/shotgun/pull/158) ([Euen](https://github.com/Euen))
 - \[Close \#155\] Euen.155.rebar3 [\#156](https://github.com/inaka/shotgun/pull/156) ([Euen](https://github.com/Euen))
 - Dave.151.update.deps.to.2.0.0.pre [\#152](https://github.com/inaka/shotgun/pull/152) ([davecaos](https://github.com/davecaos))
 - \[Fix \#148\] Update dependencies; Update erlang.mk; Add ruleset to elvis.config [\#150](https://github.com/inaka/shotgun/pull/150) ([harenson](https://github.com/harenson))
