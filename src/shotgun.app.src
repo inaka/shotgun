@@ -11,7 +11,6 @@
   {mod, {shotgun_app, []}},
   {modules, []},
   {registered, []},
-  {maintainers, ["Inaka"]},
   {licenses, ["Apache 2.0"]},
   {links, [ {"Github", "https://github.com/inaka/shotgun"}
           , {"Docs", "http://inaka.github.io/shotgun/"}
