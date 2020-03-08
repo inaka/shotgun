@@ -321,12 +321,15 @@ parse_event(EventBin) ->
     FoldFun =
         fun(Line, #{data := Data} = Event) ->
                 case Line of
-                    <<"data: ", NewData/binary>> ->
-                        Event#{data => <<Data/binary, NewData/binary, "\n">>};
-                    <<"id: ", Id/binary>> ->
-                        Event#{id => Id};
-                    <<"event: ", EventName/binary>> ->
-                        Event#{event => EventName};
+                    <<"data:", NewData/binary>> ->
+                        TrimmedNewData = binary_ltrim(NewData),
+                        Event#{
+                            data => <<Data/binary, TrimmedNewData/binary, "\n">>
+                        };
+                    <<"id:", Id/binary>> ->
+                        Event#{id => binary_ltrim(Id)};
+                    <<"event:", EventName/binary>> ->
+                        Event#{event => binary_ltrim(EventName)};
                     <<_Comment/binary>> ->
                         Event
                 end
@@ -785,3 +788,10 @@ get_work(State) ->
 append_work(Work, State) ->
     #{pending_requests := PendingReqs} = State,
     State#{pending_requests := queue:in(Work, PendingReqs)}.
+
+%% @private
+-spec binary_ltrim(binary()) -> binary().
+binary_ltrim(<<32, Bin/binary>>) ->
+    binary_ltrim(Bin);
+binary_ltrim(Bin) ->
+    Bin.
