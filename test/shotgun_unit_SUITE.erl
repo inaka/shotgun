@@ -1,11 +1,6 @@
 -module(shotgun_unit_SUITE).
 
--export([ all/0
-    , init_per_suite/1
-    , end_per_suite/1
-    , init_per_testcase/2
-    , end_per_testcase/2
-]).
+-export([ all/0 ]).
 
 -export([ parse_event/1
     , parse_event_optional_spaces/1
@@ -24,25 +19,6 @@
 
 -spec all() -> [atom()].
 all() -> shotgun_test_utils:all(?MODULE).
-
--spec init_per_suite(shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
-init_per_suite(Config) ->
-    Config.
-
--spec end_per_suite(shotgun_test_utils:config()) -> shotgun_test_utils:config().
-end_per_suite(Config) ->
-    Config.
-
--spec init_per_testcase(atom(), shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
-init_per_testcase(_, Config) ->
-    Config.
-
--spec end_per_testcase(atom(), shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
-end_per_testcase(_, Config) ->
-    Config.
 
 %%------------------------------------------------------------------------------
 %% Test Cases
