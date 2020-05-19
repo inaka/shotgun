@@ -1,6 +1,19 @@
-# Change Log
+# Changelog
 
-## [0.4.0](https://github.com/inaka/shotgun/tree/0.4.0)
+## [0.4.1](https://github.com/inaka/shotgun/tree/0.4.1) (2020-05-19)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.4.0...0.4.1)
+
+**Closed issues:**
+
+- New release? [\#179](https://github.com/inaka/shotgun/issues/179)
+
+**Merged pull requests:**
+
+- Left trim optional spaces in event field values [\#182](https://github.com/inaka/shotgun/pull/182) ([zurab-darkly](https://github.com/zurab-darkly))
+- Improve things a bit to be compatible with new hex [\#181](https://github.com/inaka/shotgun/pull/181) ([elbrujohalcon](https://github.com/elbrujohalcon))
+
+## [0.4.0](https://github.com/inaka/shotgun/tree/0.4.0) (2019-10-16)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.3.0...0.4.0)
 
@@ -15,6 +28,7 @@
 
 **Merged pull requests:**
 
+- Prepare release 0.4.0 [\#180](https://github.com/inaka/shotgun/pull/180) ([jfacorro](https://github.com/jfacorro))
 - Fix dialyzer warning for gun\_opts [\#177](https://github.com/inaka/shotgun/pull/177) ([unix1](https://github.com/unix1))
 - Monitor gun process, handle DOWN message in at\_rest state [\#176](https://github.com/inaka/shotgun/pull/176) ([unix1](https://github.com/unix1))
 - Update legacy rebar to gun 1.3.0 too [\#175](https://github.com/inaka/shotgun/pull/175) ([unix1](https://github.com/unix1))
@@ -30,6 +44,7 @@
 - \[\#160\] Fixed all dialyzer errors [\#161](https://github.com/inaka/shotgun/pull/161) ([HernanRivasAcosta](https://github.com/HernanRivasAcosta))
 
 ## [0.3.0](https://github.com/inaka/shotgun/tree/0.3.0) (2016-06-08)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.2.3...0.3.0)
 
 **Implemented enhancements:**
@@ -52,6 +67,7 @@
 - \[Fix \#148\] Update dependencies; Update erlang.mk; Add ruleset to elvis.config [\#150](https://github.com/inaka/shotgun/pull/150) ([harenson](https://github.com/harenson))
 
 ## [0.2.3](https://github.com/inaka/shotgun/tree/0.2.3) (2016-01-22)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.2.2...0.2.3)
 
 **Merged pull requests:**
@@ -60,6 +76,7 @@
 - \[Fix \#114\] update cowboy and cowlib version [\#145](https://github.com/inaka/shotgun/pull/145) ([Euen](https://github.com/Euen))
 
 ## [0.2.2](https://github.com/inaka/shotgun/tree/0.2.2) (2016-01-20)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.2.0...0.2.2)
 
 **Merged pull requests:**
@@ -67,6 +84,7 @@
 - Version Bump to 0.2.1 [\#143](https://github.com/inaka/shotgun/pull/143) ([cabol](https://github.com/cabol))
 
 ## [0.2.0](https://github.com/inaka/shotgun/tree/0.2.0) (2016-01-18)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.15...0.2.0)
 
 **Fixed bugs:**
@@ -84,6 +102,7 @@
 - Update README URLs based on HTTP redirects [\#139](https://github.com/inaka/shotgun/pull/139) ([ReadmeCritic](https://github.com/ReadmeCritic))
 
 ## [0.1.15](https://github.com/inaka/shotgun/tree/0.1.15) (2016-01-05)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.12...0.1.15)
 
 **Implemented enhancements:**
@@ -114,8 +133,6 @@
 - \[\#122\] Updated to upload in hex.pm [\#135](https://github.com/inaka/shotgun/pull/135) ([davecaos](https://github.com/davecaos))
 - \[\#102\] Allow proplist headers [\#133](https://github.com/inaka/shotgun/pull/133) ([tothlac](https://github.com/tothlac))
 - \[Closes \#98\] Added tests and improved code [\#131](https://github.com/inaka/shotgun/pull/131) ([jfacorro](https://github.com/jfacorro))
-- Revert "\(\#45\) Add last\_event\_id per sse spec" [\#129](https://github.com/inaka/shotgun/pull/129) ([elbrujohalcon](https://github.com/elbrujohalcon))
-- \(\#45\) Add last\_event\_id per sse spec [\#128](https://github.com/inaka/shotgun/pull/128) ([tothlac](https://github.com/tothlac))
 - Dialyzer fixes and firx for encode basic auth [\#126](https://github.com/inaka/shotgun/pull/126) ([tothlac](https://github.com/tothlac))
 - \[Close \#118\] Chunked requests [\#119](https://github.com/inaka/shotgun/pull/119) ([jfacorro](https://github.com/jfacorro))
 - Maybe issue 95 fix [\#115](https://github.com/inaka/shotgun/pull/115) ([kennethlakin](https://github.com/kennethlakin))
@@ -127,6 +144,7 @@
 - Error reply [\#90](https://github.com/inaka/shotgun/pull/90) ([davecaos](https://github.com/davecaos))
 
 ## [0.1.12](https://github.com/inaka/shotgun/tree/0.1.12) (2015-06-26)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.11...0.1.12)
 
 **Fixed bugs:**
@@ -146,6 +164,7 @@
 - \[\#88\] fix unrecognised events in parse\_event\(\) [\#89](https://github.com/inaka/shotgun/pull/89) ([davecaos](https://github.com/davecaos))
 
 ## [0.1.11](https://github.com/inaka/shotgun/tree/0.1.11) (2015-06-06)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.10...0.1.11)
 
 **Closed issues:**
@@ -158,6 +177,7 @@
 - Update dependencies [\#69](https://github.com/inaka/shotgun/pull/69) ([elbrujohalcon](https://github.com/elbrujohalcon))
 
 ## [0.1.10](https://github.com/inaka/shotgun/tree/0.1.10) (2015-05-19)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.9...0.1.10)
 
 **Closed issues:**
@@ -172,6 +192,7 @@
 - \[Fix \#80\] Version Bump 0.1.9 [\#82](https://github.com/inaka/shotgun/pull/82) ([davecaos](https://github.com/davecaos))
 
 ## [0.1.9](https://github.com/inaka/shotgun/tree/0.1.9) (2015-05-19)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.8...0.1.9)
 
 **Fixed bugs:**
@@ -195,6 +216,7 @@
 - Update LICENSE [\#72](https://github.com/inaka/shotgun/pull/72) ([andresinaka](https://github.com/andresinaka))
 
 ## [0.1.8](https://github.com/inaka/shotgun/tree/0.1.8) (2015-04-10)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.7...0.1.8)
 
 **Merged pull requests:**
@@ -202,6 +224,7 @@
 - Make it compatible with latest release of 'gun' [\#68](https://github.com/inaka/shotgun/pull/68) ([cabol](https://github.com/cabol))
 
 ## [0.1.7](https://github.com/inaka/shotgun/tree/0.1.7) (2015-03-05)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.6...0.1.7)
 
 **Implemented enhancements:**
@@ -232,6 +255,7 @@
 - Request timeout. [\#56](https://github.com/inaka/shotgun/pull/56) ([loguntsov](https://github.com/loguntsov))
 
 ## [0.1.6](https://github.com/inaka/shotgun/tree/0.1.6) (2014-12-02)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.5...0.1.6)
 
 **Fixed bugs:**
@@ -243,6 +267,7 @@
 - \[Fixes \#53 \#54\]. [\#55](https://github.com/inaka/shotgun/pull/55) ([Euen](https://github.com/Euen))
 
 ## [0.1.5](https://github.com/inaka/shotgun/tree/0.1.5) (2014-10-30)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.4...0.1.5)
 
 **Implemented enhancements:**
@@ -270,6 +295,7 @@
 - \[\#32\] Useful README. [\#42](https://github.com/inaka/shotgun/pull/42) ([jfacorro](https://github.com/jfacorro))
 
 ## [0.1.4](https://github.com/inaka/shotgun/tree/0.1.4) (2014-10-14)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.3...0.1.4)
 
 **Closed issues:**
@@ -281,6 +307,7 @@
 - \[Closes \#39\] Added request/6. [\#40](https://github.com/inaka/shotgun/pull/40) ([jfacorro](https://github.com/jfacorro))
 
 ## [0.1.3](https://github.com/inaka/shotgun/tree/0.1.3) (2014-10-14)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.2...0.1.3)
 
 **Implemented enhancements:**
@@ -292,6 +319,7 @@
 - \[Closes \#37\] Added rebar.config. [\#38](https://github.com/inaka/shotgun/pull/38) ([jfacorro](https://github.com/jfacorro))
 
 ## [0.1.2](https://github.com/inaka/shotgun/tree/0.1.2) (2014-09-29)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.1...0.1.2)
 
 **Fixed bugs:**
@@ -304,6 +332,7 @@
 - \[Closes \#34\] Added response to events queue on async request termination. [\#35](https://github.com/inaka/shotgun/pull/35) ([Euen](https://github.com/Euen))
 
 ## [0.1.1](https://github.com/inaka/shotgun/tree/0.1.1) (2014-09-25)
+
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.1.0...0.1.1)
 
 **Merged pull requests:**
@@ -311,6 +340,9 @@
 - Split events [\#17](https://github.com/inaka/shotgun/pull/17) ([unbalancedparentheses](https://github.com/unbalancedparentheses))
 
 ## [0.1.0](https://github.com/inaka/shotgun/tree/0.1.0) (2014-08-15)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/4a940227a6818846c197caa87cdef811454f573c...0.1.0)
+
 **Implemented enhancements:**
 
 - Add support for pushing messages [\#8](https://github.com/inaka/shotgun/issues/8)
@@ -350,4 +382,4 @@
 
 
 
-\* *This Change Log was automatically generated by [github_changelog_generator](https://github.com/skywinder/Github-Changelog-Generator)*
+\* *This Changelog was automatically generated by [github_changelog_generator](https://github.com/github-changelog-generator/github-changelog-generator)*
