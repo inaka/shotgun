@@ -538,12 +538,12 @@ receive_data(cast, {gun_data, _Pid, StreamRef, nofin, Data},
     {next_state, receive_data, State#{data => NewData}};
 receive_data(cast, {gun_data, _Pid, _StreamRef, fin, Data},
              #{data := DataAcc, from := From, status_code
-             := StatusCode, headers := Headers} = State) ->
+               := StatusCode, headers := Headers} = State) ->
     NewData = <<DataAcc/binary, Data/binary>>,
     Result = {ok, #{status_code => StatusCode,
-        headers => Headers,
-        body => NewData
-    }},
+                    headers => Headers,
+                    body => NewData
+                   }},
     gen_statem:reply(From, Result),
     {next_state, at_rest, State, 0};
 receive_data(cast, {gun_error, _Pid, StreamRef, _Reason},
