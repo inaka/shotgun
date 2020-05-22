@@ -483,8 +483,7 @@ wait_response({call, From}
               , {data, Data, FinNoFin}
               , #{stream := StreamRef, pid := Pid} = StateData) ->
     ok = gun:data(Pid, StreamRef, FinNoFin, Data),
-    gen_statem:reply(From, ok),
-    {next_state, wait_response, StateData};
+    {next_state, wait_response, StateData, [{reply, From, ok}]};
 wait_response({call, From}, Event, StateData) ->
     enqueue_work_or_stop(wait_response, Event, From, StateData);
 wait_response(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
@@ -492,31 +491,28 @@ wait_response(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
 wait_response(cast, {gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
               #{from := From} = StateData) ->
     Response = #{status_code => StatusCode, headers => Headers},
-    gen_statem:reply(From, {ok, Response}),
-    {next_state, at_rest, StateData, 0};
+    {next_state, at_rest, StateData, [{reply, From, {ok, Response}}]};
 wait_response(cast, {gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               #{from := From, stream := StreamRef, async := Async} = StateData) ->
-    StateName =
+    {StateName, Actions} =
       case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
           {<<"transfer-encoding">>, <<"chunked">>} when Async ->
               Result = {ok, StreamRef},
-              gen_statem:reply(From, Result),
-              receive_chunk;
+              {receive_chunk, [{reply, From, Result}]};
           _ ->
-              receive_data
+              {receive_data, []}
       end,
     { next_state
     , StateName
     , StateData#{status_code := StatusCode, headers := Headers}
+    , Actions
     };
 wait_response(cast, {gun_error, _Pid, _StreamRef, Error},
               #{from := From} = StateData) ->
-    gen_statem:reply(From, {error, Error}),
-    {next_state, at_rest, StateData, 0};
+    {next_state, at_rest, StateData, [{reply, From, {error, Error}}]};
 wait_response(cast, body_chunked,
               #{stream := StreamRef, from := From} = StateData) ->
-    gen_statem:reply(From, {ok, StreamRef}),
-    {next_state, wait_response, StateData};
+    {next_state, wait_response, StateData, [{reply, From, {ok, StreamRef}}]};
 wait_response(cast, Event, StateData) ->
     {stop, {unexpected, Event}, StateData};
 wait_response(info, Event, StateData) ->
@@ -545,8 +541,7 @@ receive_data(cast, {gun_data, _Pid, _StreamRef, fin, Data},
                     headers => Headers,
                     body => NewData
                    }},
-    gen_statem:reply(From, Result),
-    {next_state, at_rest, StateData, 0};
+    {next_state, at_rest, StateData, [{reply, From, Result}]};
 receive_data(cast, {gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = StateData) ->
     {next_state, at_rest, StateData, 0};
@@ -724,8 +719,7 @@ check_uri(U) ->
   {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
 enqueue_work_or_stop(_StateName, get_events, From, #{responses := Responses} = StateData) ->
     Reply = queue:to_list(Responses),
-    ok = gen_statem:reply(From, Reply),
-    {keep_state, StateData#{responses := queue:new()}};
+    {keep_state, StateData#{responses := queue:new()}, [{reply, From, Reply}]};
 enqueue_work_or_stop(StateName = at_rest, Event, From, StateData) ->
     enqueue_work_or_stop(StateName, Event, From, StateData, 0);
 enqueue_work_or_stop(StateName, Event, From, StateData) ->
@@ -742,8 +736,7 @@ enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
             {keep_state, NewStateData, [{timeout, Timeout, get_work}]};
         not_work ->
             Error = {error, {unexpected, Event}},
-            gen_statem:reply(From, Error),
-            keep_state_and_data
+            {keep_state_and_data, [{reply, From, Error}]}
     end.
 
 %% @private
