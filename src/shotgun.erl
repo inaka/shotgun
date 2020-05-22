@@ -427,7 +427,7 @@ terminate(_Reason, _StateName, #{pid := Pid} = _StateData) ->
 %See if we have work. If we do, dispatch.
 %If we don't, stay in at_rest.
 %% @private
--spec at_rest({call, pid()} | cast | info, term(), statedata()) ->
+-spec at_rest({call, gen_statem:from()} | cast | info, term(), statedata()) ->
     keep_state_and_data |
     {keep_state, statedata()} |
     {next_state, atom(), statedata(), timeout()}.
@@ -473,7 +473,7 @@ at_rest(info, Event, StateData) ->
     handle_info(Event, at_rest, StateData).
 
 %% @private
--spec wait_response({call, pid()} | cast | info, term(), statedata()) ->
+-spec wait_response({call, gen_statem:from()} | cast | info, term(), statedata()) ->
     keep_state_and_data |
     {keep_state, statedata()} |
     {stop, {error, any()}, atom(), statedata()} |
@@ -524,7 +524,7 @@ wait_response(info, Event, StateData) ->
 
 %% @private
 %% @doc Regular response
--spec receive_data({call, pid()} | cast | info, term(), statedata()) ->
+-spec receive_data({call, gen_statem:from()} | cast | info, term(), statedata()) ->
     keep_state_and_data |
     {keep_state, statedata()} |
     {next_state, atom(), statedata()} |
@@ -555,7 +555,7 @@ receive_data(info, Event, StateData) ->
 
 %% @private
 %% @doc Chunked data response
--spec receive_chunk({call, pid()} | cast | info, term(), statedata()) ->
+-spec receive_chunk({call, gen_statem:from()} | cast | info, term(), statedata()) ->
     {stop, {error, any()}, atom(), statedata()} |
     {next_state, atom(), statedata()} |
     {next_state, atom(), statedata(), timeout()}.
@@ -718,9 +718,10 @@ check_uri(U) ->
   end.
 
 %% @private
--spec enqueue_work_or_stop(atom(), term(), pid(), statedata()) ->
-    {stop, {error, any()}, atom(), statedata()} |
-    {next_state, atom(), statedata(), timeout()}.
+-spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata()) ->
+  keep_state_and_data |
+  {keep_state, statedata()} |
+  {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
 enqueue_work_or_stop(_StateName, get_events, From, #{responses := Responses} = StateData) ->
     Reply = queue:to_list(Responses),
     ok = gen_statem:reply(From, Reply),
@@ -731,9 +732,9 @@ enqueue_work_or_stop(StateName, Event, From, StateData) ->
     enqueue_work_or_stop(StateName, Event, From, StateData, infinity).
 
 %% @private
--spec enqueue_work_or_stop(atom(), term(), pid(), statedata(), timeout()) ->
+-spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata(), timeout()) ->
     keep_state_and_data |
-    {keep_state, statedata()}.
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
 enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     case create_work(Event, From) of
         {ok, Work} ->
@@ -746,7 +747,7 @@ enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     end.
 
 %% @private
--spec create_work({atom(), list()}, pid()) ->
+-spec create_work({atom(), list()}, gen_statem:from()) ->
     not_work | {ok, work()}.
 create_work({M = get_async, {HandleEvent, AsyncMode}, Args}, From) ->
     {ok, {M, {HandleEvent, AsyncMode}, Args, From}};
