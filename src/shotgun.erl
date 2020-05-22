@@ -333,18 +333,18 @@ parse_event(EventBin) ->
 %% gen_statem callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--type state() :: #{ async            => boolean()
-                  , async_mode       => false | binary | sse
-                  , buffer           => binary()
-                  , data             => binary()
-                  , from             => term()
-                  , handle_event     => term()
-                  , headers          => term()
-                  , pending_requests => queue:queue() | undefined
-                  , pid              => pid() | undefined
-                  , responses        => queue:queue() | undefined
-                  , status_code      => integer() | undefined
-                  , stream           => reference() | undefined}.
+-type statedata() :: #{ async            => boolean()
+                      , async_mode       => false | binary | sse
+                      , buffer           => binary()
+                      , data             => binary()
+                      , from             => term()
+                      , handle_event     => term()
+                      , headers          => term()
+                      , pending_requests => queue:queue() | undefined
+                      , pid              => pid() | undefined
+                      , responses        => queue:queue() | undefined
+                      , status_code      => integer() | undefined
+                      , stream           => reference() | undefined}.
 
 %% @private
 -spec callback_mode() -> state_functions.
@@ -352,7 +352,7 @@ callback_mode() -> state_functions.
 
 %% @private
 -spec init([{string(), integer(), connection_type(), open_opts()}]) ->
-    {ok, at_rest, state()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
+    {ok, at_rest, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
 init([{Host, Port, Type, Opts}]) ->
     GunType = case Type of
                   http -> tcp;
@@ -391,13 +391,13 @@ init([{Host, Port, Type, Opts}]) ->
 
 %% @private
 -spec handle_info(term(), atom(), term()) ->
-    {next_state, atom(), state()}.
+    {next_state, atom(), statedata()}.
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
 handle_info(
     {gun_down, Pid, Protocol, {error, Reason},
      KilledStreams, UnprocessedStreams}, StateName,
-     StateData = #{pid := Pid}) ->
+    StateData = #{pid := Pid}) ->
     error_logger:warning_msg(
         "~p connection down on ~p: ~p (Killed: ~p, Unprocessed: ~p)",
         [Protocol, Pid, Reason, KilledStreams, UnprocessedStreams]),
@@ -427,10 +427,10 @@ terminate(_Reason, _StateName, #{pid := Pid} = _StateData) ->
 %See if we have work. If we do, dispatch.
 %If we don't, stay in at_rest.
 %% @private
--spec at_rest({call, pid()} | cast | info, term(), state()) ->
+-spec at_rest({call, pid()} | cast | info, term(), statedata()) ->
     keep_state_and_data |
-    {keep_state, state()} |
-    {next_state, atom(), state(), timeout()}.
+    {keep_state, statedata()} |
+    {next_state, atom(), statedata(), timeout()}.
 at_rest({call, From}, Event, StateData) ->
     enqueue_work_or_stop(at_rest, Event, From, StateData);
 at_rest(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
@@ -473,12 +473,12 @@ at_rest(info, Event, StateData) ->
     handle_info(Event, at_rest, StateData).
 
 %% @private
--spec wait_response({call, pid()} | cast | info, term(), state()) ->
+-spec wait_response({call, pid()} | cast | info, term(), statedata()) ->
     keep_state_and_data |
-    {keep_state, state()} |
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
+    {keep_state, statedata()} |
+    {stop, {error, any()}, atom(), statedata()} |
+    {next_state, atom(), statedata()} |
+    {next_state, atom(), statedata(), timeout()}.
 wait_response({call, From}
               , {data, Data, FinNoFin}
               , #{stream := StreamRef, pid := Pid} = StateData) ->
@@ -523,11 +523,12 @@ wait_response(info, Event, StateData) ->
     handle_info(Event, wait_response, StateData).
 
 %% @private
--spec receive_data({call, pid()} | cast | info, term(), state()) ->
+%% @doc Regular response
+-spec receive_data({call, pid()} | cast | info, term(), statedata()) ->
     keep_state_and_data |
-    {keep_state, state()} |
-    {next_state, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
+    {keep_state, statedata()} |
+    {next_state, atom(), statedata()} |
+    {next_state, atom(), statedata(), timeout()}.
 receive_data({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_data, Event, From, StateData);
 receive_data(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
@@ -554,10 +555,10 @@ receive_data(info, Event, StateData) ->
 
 %% @private
 %% @doc Chunked data response
--spec receive_chunk({call, pid()} | cast | info, term(), state()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
+-spec receive_chunk({call, pid()} | cast | info, term(), statedata()) ->
+    {stop, {error, any()}, atom(), statedata()} |
+    {next_state, atom(), statedata()} |
+    {next_state, atom(), statedata(), timeout()}.
 receive_chunk({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_chunk, Event, From, StateData);
 receive_chunk(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
@@ -580,12 +581,12 @@ receive_chunk(info, Event, StateData) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @private
--spec clean_state_data() -> state().
+-spec clean_state_data() -> statedata().
 clean_state_data() ->
     clean_state_data(#{}).
 
 %% @private
--spec clean_state_data(map()) -> state().
+-spec clean_state_data(map()) -> statedata().
 clean_state_data(StateData) ->
     Responses = maps:get(responses, StateData, queue:new()),
     Requests  = maps:get(pending_requests, StateData, queue:new()),
@@ -617,7 +618,8 @@ http_verb_bin(Method) ->
     list_to_binary(MethodStr).
 
 %% @private
--spec manage_chunk(fin | nofin, reference(), binary(), state()) -> state().
+-spec manage_chunk(fin | nofin, reference(), binary(), statedata()) ->
+  statedata().
 manage_chunk(IsFin, StreamRef, Data,
              StateData = #{handle_event := undefined,
                            responses := Responses,
@@ -690,8 +692,8 @@ encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
 %% @private
--spec sse_events(fin | nofin, binary(), state()) ->
-    {list(binary()), state()}.
+-spec sse_events(fin | nofin, binary(), statedata()) ->
+    {list(binary()), statedata()}.
 sse_events(IsFin, Data, StateData = #{buffer := Buffer}) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
     DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
@@ -716,9 +718,9 @@ check_uri(U) ->
   end.
 
 %% @private
--spec enqueue_work_or_stop(atom(), term(), pid(), state()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
+-spec enqueue_work_or_stop(atom(), term(), pid(), statedata()) ->
+    {stop, {error, any()}, atom(), statedata()} |
+    {next_state, atom(), statedata(), timeout()}.
 enqueue_work_or_stop(_StateName, get_events, From, #{responses := Responses} = StateData) ->
     Reply = queue:to_list(Responses),
     ok = gen_statem:reply(From, Reply),
@@ -729,9 +731,9 @@ enqueue_work_or_stop(StateName, Event, From, StateData) ->
     enqueue_work_or_stop(StateName, Event, From, StateData, infinity).
 
 %% @private
--spec enqueue_work_or_stop(atom(), term(), pid(), state(), timeout()) ->
+-spec enqueue_work_or_stop(atom(), term(), pid(), statedata(), timeout()) ->
     keep_state_and_data |
-    {keep_state, state()}.
+    {keep_state, statedata()}.
 enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     case create_work(Event, From) of
         {ok, Work} ->
@@ -758,7 +760,7 @@ create_work(_, _) ->
     not_work.
 
 %% @private
--spec get_work(state()) -> no_work | {ok, work(), state()}.
+-spec get_work(statedata()) -> no_work | {ok, work(), statedata()}.
 get_work(StateData) ->
     PendingReqs = maps:get(pending_requests, StateData),
     case queue:is_empty(PendingReqs) of
@@ -771,7 +773,7 @@ get_work(StateData) ->
     end.
 
 %% @private
--spec append_work(work(), state()) -> state().
+-spec append_work(work(), statedata()) -> statedata().
 append_work(Work, StateData) ->
     #{pending_requests := PendingReqs} = StateData,
     StateData#{pending_requests := queue:in(Work, PendingReqs)}.
