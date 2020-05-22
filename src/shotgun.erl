@@ -428,9 +428,10 @@ terminate(_Reason, _StateName, #{pid := Pid} = _StateData) ->
 %If we don't, stay in at_rest.
 %% @private
 -spec at_rest({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    keep_state_and_data |
-    {keep_state, statedata()} |
-    {next_state, atom(), statedata(), timeout()}.
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    {next_state, atom(), statedata()}.
 at_rest({call, From}, Event, StateData) ->
     enqueue_work_or_stop(at_rest, Event, From, StateData);
 at_rest(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
@@ -474,11 +475,11 @@ at_rest(info, Event, StateData) ->
 
 %% @private
 -spec wait_response({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    keep_state_and_data |
-    {keep_state, statedata()} |
-    {stop, {error, any()}, atom(), statedata()} |
-    {next_state, atom(), statedata()} |
-    {next_state, atom(), statedata(), timeout()}.
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    {stop, {unexpected, any()}, statedata()} |
+    {next_state, atom(), statedata()}.
 wait_response({call, From}
               , {data, Data, FinNoFin}
               , #{stream := StreamRef, pid := Pid} = StateData) ->
@@ -521,10 +522,10 @@ wait_response(info, Event, StateData) ->
 %% @private
 %% @doc Regular response
 -spec receive_data({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    keep_state_and_data |
-    {keep_state, statedata()} |
-    {next_state, atom(), statedata()} |
-    {next_state, atom(), statedata(), timeout()}.
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    {next_state, atom(), statedata()}.
 receive_data({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_data, Event, From, StateData);
 receive_data(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
@@ -544,16 +545,18 @@ receive_data(cast, {gun_data, _Pid, _StreamRef, fin, Data},
     {next_state, at_rest, StateData, [{reply, From, Result}]};
 receive_data(cast, {gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = StateData) ->
-    {next_state, at_rest, StateData, 0};
+    {next_state, at_rest, StateData};
 receive_data(info, Event, StateData) ->
     handle_info(Event, receive_data, StateData).
 
 %% @private
 %% @doc Chunked data response
 -spec receive_chunk({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    {stop, {error, any()}, atom(), statedata()} |
-    {next_state, atom(), statedata()} |
-    {next_state, atom(), statedata(), timeout()}.
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    {next_state, atom(), statedata(), [{timeout, 0, 0}]} |
+    {next_state, atom(), statedata()}.
 receive_chunk({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_chunk, Event, From, StateData);
 receive_chunk(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
@@ -562,12 +565,12 @@ receive_chunk(cast, {gun_data, _Pid, StreamRef, IsFin, Data}, StateData) ->
     NewStateData = manage_chunk(IsFin, StreamRef, Data, StateData),
     case IsFin of
         fin ->
-            {next_state, at_rest, NewStateData, 0};
+            {next_state, at_rest, NewStateData, [{timeout, 0, 0}]};
         nofin ->
             {next_state, receive_chunk, NewStateData}
     end;
 receive_chunk(cast, {gun_error, _Pid, _StreamRef, _Reason}, StateData) ->
-    {next_state, at_rest, StateData, 0};
+    {next_state, at_rest, StateData, [{timeout, 0, 0}]};
 receive_chunk(info, Event, StateData) ->
     handle_info(Event, receive_chunk, StateData).
 
@@ -714,9 +717,9 @@ check_uri(U) ->
 
 %% @private
 -spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata()) ->
-  keep_state_and_data |
-  {keep_state, statedata()} |
-  {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]}.
 enqueue_work_or_stop(_StateName, get_events, From, #{responses := Responses} = StateData) ->
     Reply = queue:to_list(Responses),
     {keep_state, StateData#{responses := queue:new()}, [{reply, From, Reply}]};
@@ -727,7 +730,7 @@ enqueue_work_or_stop(StateName, Event, From, StateData) ->
 
 %% @private
 -spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata(), timeout()) ->
-    keep_state_and_data |
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
     {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
 enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     case create_work(Event, From) of
