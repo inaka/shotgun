@@ -156,7 +156,7 @@ open(Host, Port, Type, Opts) ->
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
 close(Pid) ->
-    gen_statem:call(Pid, shutdown),
+    gen_statem:cast(Pid, shutdown),
     ok.
 
 %% @equiv get(Pid, Uri, #{}, #{})
@@ -431,6 +431,7 @@ terminate(_Reason, _StateName, #{pid := Pid} = _StateData) ->
     {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
     {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
     {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
     {next_state, atom(), statedata()}.
 at_rest({call, From}, Event, StateData) ->
     enqueue_work_or_stop(at_rest, Event, From, StateData);
@@ -444,6 +445,8 @@ at_rest(timeout, _Event, StateData) ->
             ok = gen_statem:cast(self(), Work),
             {next_state, at_rest, NewStateData}
     end;
+at_rest(cast, shutdown, _StateData) ->
+    stop;
 at_rest(cast, {get_async, {HandleEvent, AsyncMode}, Args, From},
         StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
@@ -478,6 +481,7 @@ at_rest(info, Event, StateData) ->
     {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
     {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
     {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
     {stop, {unexpected, any()}, statedata()} |
     {next_state, atom(), statedata()}.
 wait_response({call, From}
@@ -487,6 +491,8 @@ wait_response({call, From}
     {next_state, wait_response, StateData, [{reply, From, ok}]};
 wait_response({call, From}, Event, StateData) ->
     enqueue_work_or_stop(wait_response, Event, From, StateData);
+wait_response(cast, shutdown, _StateData) ->
+    stop;
 wait_response(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
     exit(Reason);
 wait_response(cast, {gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
@@ -525,9 +531,12 @@ wait_response(info, Event, StateData) ->
     {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
     {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
     {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
     {next_state, atom(), statedata()}.
 receive_data({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_data, Event, From, StateData);
+receive_data(cast, shutdown, _StateData) ->
+    stop;
 receive_data(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
     error(incomplete);
 receive_data(cast, {gun_data, _Pid, StreamRef, nofin, Data},
@@ -555,12 +564,15 @@ receive_data(info, Event, StateData) ->
     {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
     {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
     {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
     {next_state, atom(), statedata(), [{timeout, 0, 0}]} |
     {next_state, atom(), statedata()}.
 receive_chunk({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_chunk, Event, From, StateData);
 receive_chunk(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
     error(incomplete);
+receive_chunk(cast, shutdown, _StateData) ->
+    stop;
 receive_chunk(cast, {gun_data, _Pid, StreamRef, IsFin, Data}, StateData) ->
     NewStateData = manage_chunk(IsFin, StreamRef, Data, StateData),
     case IsFin of
