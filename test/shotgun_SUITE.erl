@@ -195,7 +195,7 @@ complete_coverage(Config) ->
   Conn = ?config(conn, Config),
 
   ct:comment("Sending unexpected events should return an error"),
-  {error, {unexpected, whatever}} = gen_fsm:sync_send_event(Conn, whatever),
+  {error, {unexpected, whatever}} = gen_statem:call(Conn, whatever),
   {error, {unexpected, _}} = shotgun:data(Conn, <<"data">>),
 
   ct:comment("gen_server's code_change"),

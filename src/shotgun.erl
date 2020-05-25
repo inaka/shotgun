@@ -7,7 +7,7 @@
 -author("federico@inaka.net").
 -author("juan@inaka.net").
 
--behaviour(gen_fsm).
+-behaviour(gen_statem).
 
 -export([ start/0
         , stop/0
@@ -46,24 +46,17 @@
         , data/3
           %% events
         , events/1
+        , parse_event/1
         ]).
 
+% gen_statem callbacks
 -export([ init/1
-        , handle_event/3
-        , handle_sync_event/4
-        , handle_info/3
+        , callback_mode/0
         , terminate/3
         , code_change/4
         ]).
 
--export([ at_rest/2
-        , wait_response/2
-        , receive_data/2
-        , receive_chunk/2
-        , parse_event/1
-        ]).
-
-%Work request handlers
+% gen_statem states
 -export([ at_rest/3
         , wait_response/3
         , receive_data/3
@@ -126,7 +119,7 @@ stop() ->
 -spec start_link(string(), integer(), connection_type(), open_opts()) ->
     {ok, pid()} | ignore | {error, term()}.
 start_link(Host, Port, Type, Opts) ->
-    gen_fsm:start_link(shotgun, [{Host, Port, Type, Opts}], []).
+    gen_statem:start_link(shotgun, [{Host, Port, Type, Opts}], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API
@@ -163,7 +156,7 @@ open(Host, Port, Type, Opts) ->
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
 close(Pid) ->
-    gen_fsm:send_all_state_event(Pid, 'shutdown'),
+    gen_statem:cast(Pid, shutdown),
     ok.
 
 %% @equiv get(Pid, Uri, #{}, #{})
@@ -282,7 +275,7 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
                     false ->
                         {get, {Uri, Headers, Body}}
                 end,
-        gen_fsm:sync_send_event(Pid, Event, Timeout)
+        gen_statem:call(Pid, Event, Timeout)
     catch
         _:Reason -> {error, Reason}
     end;
@@ -292,7 +285,7 @@ request(Pid, Method, Uri, Headers0, Body, Options) ->
         #{headers := Headers, timeout := Timeout} =
           process_options(Options, Headers0, Method),
         Event = {Method, {Uri, Headers, Body}},
-        gen_fsm:sync_send_event(Pid, Event, Timeout)
+        gen_statem:call(Pid, Event, Timeout)
     catch
         _:Reason -> {error, Reason}
     end.
@@ -304,12 +297,12 @@ data(Conn, Data) ->
 
 -spec data(connection(), body(), fin | nofin) -> ok | {error, any()}.
 data(Conn, Data, FinNoFin) ->
-    gen_fsm:sync_send_event(Conn, {data, Data, FinNoFin}).
+    gen_statem:call(Conn, {data, Data, FinNoFin}).
 
 %% @doc Returns a list of all received events up to now.
 -spec events(Pid :: pid()) -> [{nofin | fin, reference(), binary()}].
 events(Pid) ->
-    gen_fsm:sync_send_all_state_event(Pid, get_events).
+    gen_statem:call(Pid, get_events).
 
 %% @doc Parse an SSE event in binary format. For example the following binary
 %% <code>&lt;&lt;"data: some content\n"&gt;&gt;</code> will be turned into the
@@ -337,25 +330,29 @@ parse_event(EventBin) ->
     lists:foldl(FoldFun, #{data => <<>>}, Lines).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% gen_fsm callbacks
+%% gen_statem callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--type state() :: #{ async            => boolean()
-                  , async_mode       => false | binary | sse
-                  , buffer           => binary()
-                  , data             => binary()
-                  , from             => term()
-                  , handle_event     => term()
-                  , headers          => term()
-                  , pending_requests => queue:queue() | undefined
-                  , pid              => pid() | undefined
-                  , responses        => queue:queue() | undefined
-                  , status_code      => integer() | undefined
-                  , stream           => reference() | undefined}.
+-type statedata() :: #{ async            => boolean()
+                      , async_mode       => false | binary | sse
+                      , buffer           => binary()
+                      , data             => binary()
+                      , from             => term()
+                      , handle_event     => term()
+                      , headers          => term()
+                      , pending_requests => queue:queue() | undefined
+                      , pid              => pid() | undefined
+                      , responses        => queue:queue() | undefined
+                      , status_code      => integer() | undefined
+                      , stream           => reference() | undefined}.
+
+%% @private
+-spec callback_mode() -> state_functions.
+callback_mode() -> state_functions.
 
 %% @private
 -spec init([{string(), integer(), connection_type(), open_opts()}]) ->
-    {ok, at_rest, state()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
+    {ok, at_rest, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
 init([{Host, Port, Type, Opts}]) ->
     GunType = case Type of
                   http -> tcp;
@@ -375,8 +372,8 @@ init([{Host, Port, Type, Opts}]) ->
     _ = monitor(process, Pid),
     case gun:await_up(Pid, Timeout) of
       {ok, _} ->
-        State = clean_state(),
-        {ok, at_rest, State#{pid => Pid}};
+        StateData = clean_state_data(),
+        {ok, at_rest, StateData#{pid => Pid}};
       %The only apparent timeout for gun:open is the connection timeout of the
       %underlying transport. So, a timeout message here comes from gun:await_up.
       {error, timeout} ->
@@ -393,23 +390,8 @@ init([{Host, Port, Type, Opts}]) ->
     end.
 
 %% @private
--spec handle_event(shutdown, atom(), state()) -> {stop, normal, state()}.
-handle_event(shutdown, _StateName, StateData) ->
-    {stop, normal, StateData}.
-
-%% @private
--spec handle_sync_event(term(), {pid(), term()}, atom(), term()) ->
-    {reply, any(), atom(), state()}.
-handle_sync_event(get_events,
-                  _From,
-                  StateName,
-                  #{responses := Responses} = State) ->
-    Reply = queue:to_list(Responses),
-    {reply, Reply, StateName, State#{responses := queue:new()}}.
-
-%% @private
 -spec handle_info(term(), atom(), term()) ->
-    {next_state, atom(), state()}.
+    {next_state, atom(), statedata()}.
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
 handle_info(
@@ -425,7 +407,7 @@ handle_info(
     {next_state, StateName, StateData};
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
-    Module:StateName(Event, StateData).
+    Module:StateName(cast, Event, StateData).
 
 %% @private
 -spec code_change(term(), atom(), term(), term()) -> {ok, atom(), term()}.
@@ -434,178 +416,190 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 
 %% @private
 -spec terminate(term(), atom(), term()) -> ok.
-terminate(_Reason, _StateName, #{pid := Pid} = _State) ->
+terminate(_Reason, _StateName, #{pid := Pid} = _StateData) ->
     gun:shutdown(Pid),
     ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% gen_fsm states
+%% gen_statem states
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%% @private
--spec at_rest(term(), pid(), state()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-at_rest(Event, From, State) ->
-    enqueue_work_or_stop(at_rest, Event, From, State).
-
-%% @private
--spec wait_response(term(), pid(), term()) -> term().
-wait_response( {data, Data, FinNoFin}
-             , _From
-             , #{stream := StreamRef, pid := Pid} = State) ->
-    ok = gun:data(Pid, StreamRef, FinNoFin, Data),
-    {reply, ok, wait_response, State};
-wait_response(Event, From, State) ->
-    enqueue_work_or_stop(wait_response, Event, From, State).
-
-%% @private
--spec receive_data(term(), pid(), term()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-receive_data(Event, From, State) ->
-    enqueue_work_or_stop(receive_data, Event, From, State).
-
-%% @private
--spec receive_chunk(term(), pid(), term()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-receive_chunk(Event, From, State) ->
-    enqueue_work_or_stop(receive_chunk, Event, From, State).
 
 %See if we have work. If we do, dispatch.
 %If we don't, stay in at_rest.
 %% @private
--spec at_rest(any(), state()) -> {next_state, atom(), state()}.
-at_rest({'DOWN', _, _, _, Reason}, _State) ->
+-spec at_rest({call, gen_statem:from()} | cast | info, term(), statedata()) ->
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
+    {next_state, atom(), statedata()}.
+at_rest({call, From}, Event, StateData) ->
+    enqueue_work_or_stop(at_rest, Event, From, StateData);
+at_rest(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
     exit(Reason);
-at_rest(timeout, State) ->
-    case get_work(State) of
+at_rest(timeout, _Event, StateData) ->
+    case get_work(StateData) of
         no_work ->
-            {next_state, at_rest, State};
-        {ok, Work, NewState} ->
-            ok = gen_fsm:send_event(self(), Work),
-            {next_state, at_rest, NewState}
+            {next_state, at_rest, StateData};
+        {ok, Work, NewStateData} ->
+            ok = gen_statem:cast(self(), Work),
+            {next_state, at_rest, NewStateData}
     end;
-at_rest({get_async, {HandleEvent, AsyncMode}, Args, From},
-        State = #{pid := Pid}) ->
+at_rest(cast, shutdown, _StateData) ->
+    stop;
+at_rest(cast, {get_async, {HandleEvent, AsyncMode}, Args, From},
+        StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
-    CleanState = clean_state(State),
-    NewState = CleanState#{
-                 from => From,
-                 pid => Pid,
-                 stream => StreamRef,
-                 handle_event => HandleEvent,
-                 async => true,
-                 async_mode => AsyncMode
-                },
-    {next_state, wait_response, NewState};
-at_rest({HttpVerb, {_, _, Body} = Args, From}, State = #{pid := Pid}) ->
+    CleanStateData = clean_state_data(StateData),
+    NewStateData = CleanStateData#{
+                     from => From,
+                     pid => Pid,
+                     stream => StreamRef,
+                     handle_event => HandleEvent,
+                     async => true,
+                     async_mode => AsyncMode
+                    },
+    {next_state, wait_response, NewStateData};
+at_rest(cast, {HttpVerb, {_, _, Body} = Args, From}, StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
-    CleanState = clean_state(State),
-    NewState = CleanState#{ pid    => Pid
-                          , stream => StreamRef
-                          , from   => From
-                          },
+    CleanStateData = clean_state_data(StateData),
+    NewStateData = CleanStateData#{ pid    => Pid
+                                  , stream => StreamRef
+                                  , from   => From
+                                  },
     case Body of
         body_chunked ->
-            gen_fsm:send_event(self(), body_chunked);
+            gen_statem:cast(self(), body_chunked);
         _ -> ok
     end,
-    {next_state, wait_response, NewState}.
+    {next_state, wait_response, NewStateData};
+at_rest(info, Event, StateData) ->
+    handle_info(Event, at_rest, StateData).
 
 %% @private
--spec wait_response(term(), term()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-wait_response({'DOWN', _, _, _, Reason}, _State) ->
+-spec wait_response({call, gen_statem:from()} | cast | info, term(), statedata()) ->
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
+    {stop, {unexpected, any()}, statedata()} |
+    {next_state, atom(), statedata()}.
+wait_response({call, From}
+              , {data, Data, FinNoFin}
+              , #{stream := StreamRef, pid := Pid} = StateData) ->
+    ok = gun:data(Pid, StreamRef, FinNoFin, Data),
+    {next_state, wait_response, StateData, [{reply, From, ok}]};
+wait_response({call, From}, Event, StateData) ->
+    enqueue_work_or_stop(wait_response, Event, From, StateData);
+wait_response(cast, shutdown, _StateData) ->
+    stop;
+wait_response(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
     exit(Reason);
-wait_response({gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
-              #{from := From} = State) ->
+wait_response(cast, {gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
+              #{from := From} = StateData) ->
     Response = #{status_code => StatusCode, headers => Headers},
-    gen_fsm:reply(From, {ok, Response}),
-    {next_state, at_rest, State, 0};
-wait_response({gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
-              #{from := From, stream := StreamRef, async := Async} = State) ->
-    StateName =
+    {next_state, at_rest, StateData, [{reply, From, {ok, Response}}]};
+wait_response(cast, {gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
+              #{from := From, stream := StreamRef, async := Async} = StateData) ->
+    {StateName, Actions} =
       case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
           {<<"transfer-encoding">>, <<"chunked">>} when Async ->
               Result = {ok, StreamRef},
-              gen_fsm:reply(From, Result),
-              receive_chunk;
+              {receive_chunk, [{reply, From, Result}]};
           _ ->
-              receive_data
+              {receive_data, []}
       end,
     { next_state
     , StateName
-    , State#{status_code := StatusCode, headers := Headers}
+    , StateData#{status_code := StatusCode, headers := Headers}
+    , Actions
     };
-wait_response({gun_error, _Pid, _StreamRef, Error},
-              #{from := From} = State) ->
-    gen_fsm:reply(From, {error, Error}),
-    {next_state, at_rest, State, 0};
-wait_response(body_chunked,
-              #{stream := StreamRef, from := From} = State) ->
-    gen_fsm:reply(From, {ok, StreamRef}),
-    {next_state, wait_response, State};
-wait_response(Event, State) ->
-    {stop, {unexpected, Event}, State}.
+wait_response(cast, {gun_error, _Pid, _StreamRef, Error},
+              #{from := From} = StateData) ->
+    {next_state, at_rest, StateData, [{reply, From, {error, Error}}]};
+wait_response(cast, body_chunked,
+              #{stream := StreamRef, from := From} = StateData) ->
+    {next_state, wait_response, StateData, [{reply, From, {ok, StreamRef}}]};
+wait_response(cast, Event, StateData) ->
+    {stop, {unexpected, Event}, StateData};
+wait_response(info, Event, StateData) ->
+    handle_info(Event, wait_response, StateData).
 
 %% @private
 %% @doc Regular response
--spec receive_data(term(), term()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-receive_data({'DOWN', _, _, _, _Reason}, _State) ->
+-spec receive_data({call, gen_statem:from()} | cast | info, term(), statedata()) ->
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
+    {next_state, atom(), statedata()}.
+receive_data({call, From}, Event, StateData) ->
+    enqueue_work_or_stop(receive_data, Event, From, StateData);
+receive_data(cast, shutdown, _StateData) ->
+    stop;
+receive_data(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
     error(incomplete);
-receive_data({gun_data, _Pid, StreamRef, nofin, Data},
-             #{stream := StreamRef, data := DataAcc} = State) ->
+receive_data(cast, {gun_data, _Pid, StreamRef, nofin, Data},
+             #{stream := StreamRef, data := DataAcc} = StateData) ->
     NewData = <<DataAcc/binary, Data/binary>>,
-    {next_state, receive_data, State#{data => NewData}};
-receive_data({gun_data, _Pid, _StreamRef, fin, Data},
+    {next_state, receive_data, StateData#{data => NewData}};
+receive_data(cast, {gun_data, _Pid, _StreamRef, fin, Data},
              #{data := DataAcc, from := From, status_code
-               := StatusCode, headers := Headers} = State) ->
+               := StatusCode, headers := Headers} = StateData) ->
     NewData = <<DataAcc/binary, Data/binary>>,
     Result = {ok, #{status_code => StatusCode,
                     headers => Headers,
                     body => NewData
                    }},
-    gen_fsm:reply(From, Result),
-    {next_state, at_rest, State, 0};
-receive_data({gun_error, _Pid, StreamRef, _Reason},
-             #{stream := StreamRef} = State) ->
-    {next_state, at_rest, State, 0}.
+    {next_state, at_rest, StateData, [{reply, From, Result}]};
+receive_data(cast, {gun_error, _Pid, StreamRef, _Reason},
+             #{stream := StreamRef} = StateData) ->
+    {next_state, at_rest, StateData};
+receive_data(info, Event, StateData) ->
+    handle_info(Event, receive_data, StateData).
 
 %% @private
 %% @doc Chunked data response
--spec receive_chunk(term(), state()) -> term().
-receive_chunk({'DOWN', _, _, _, _Reason}, _State) ->
+-spec receive_chunk({call, gen_statem:from()} | cast | info, term(), statedata()) ->
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    stop |
+    {next_state, atom(), statedata(), [{timeout, 0, 0}]} |
+    {next_state, atom(), statedata()}.
+receive_chunk({call, From}, Event, StateData) ->
+    enqueue_work_or_stop(receive_chunk, Event, From, StateData);
+receive_chunk(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
     error(incomplete);
-receive_chunk({gun_data, _Pid, StreamRef, IsFin, Data}, State) ->
-    NewState = manage_chunk(IsFin, StreamRef, Data, State),
+receive_chunk(cast, shutdown, _StateData) ->
+    stop;
+receive_chunk(cast, {gun_data, _Pid, StreamRef, IsFin, Data}, StateData) ->
+    NewStateData = manage_chunk(IsFin, StreamRef, Data, StateData),
     case IsFin of
         fin ->
-            {next_state, at_rest, NewState, 0};
+            {next_state, at_rest, NewStateData, [{timeout, 0, 0}]};
         nofin ->
-            {next_state, receive_chunk, NewState}
+            {next_state, receive_chunk, NewStateData}
     end;
-receive_chunk({gun_error, _Pid, _StreamRef, _Reason}, State) ->
-    {next_state, at_rest, State, 0}.
+receive_chunk(cast, {gun_error, _Pid, _StreamRef, _Reason}, StateData) ->
+    {next_state, at_rest, StateData, [{timeout, 0, 0}]};
+receive_chunk(info, Event, StateData) ->
+    handle_info(Event, receive_chunk, StateData).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @private
--spec clean_state() -> state().
-clean_state() ->
-    clean_state(#{}).
+-spec clean_state_data() -> statedata().
+clean_state_data() ->
+    clean_state_data(#{}).
 
 %% @private
--spec clean_state(map()) -> state().
-clean_state(State) ->
-    Responses = maps:get(responses, State, queue:new()),
-    Requests  = maps:get(pending_requests, State, queue:new()),
+-spec clean_state_data(map()) -> statedata().
+clean_state_data(StateData) ->
+    Responses = maps:get(responses, StateData, queue:new()),
+    Requests  = maps:get(pending_requests, StateData, queue:new()),
     #{
        pid              => undefined,
        stream           => undefined,
@@ -634,36 +628,36 @@ http_verb_bin(Method) ->
     list_to_binary(MethodStr).
 
 %% @private
--spec manage_chunk(fin | nofin, reference(), binary(), state()) -> state().
+-spec manage_chunk(fin | nofin, reference(), binary(), statedata()) ->
+  statedata().
 manage_chunk(IsFin, StreamRef, Data,
-             State = #{handle_event := undefined,
-                       responses := Responses,
-                       async_mode := binary}) ->
+             StateData = #{handle_event := undefined,
+                           responses := Responses,
+                           async_mode := binary}) ->
     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses),
-    State#{responses => NewResponses};
+    StateData#{responses => NewResponses};
 manage_chunk(IsFin, StreamRef, Data,
-             State = #{handle_event := undefined,
-                       responses := Responses,
-                       async_mode := sse}) ->
-    {Events, NewState} = sse_events(IsFin, Data, State),
+             StateData = #{handle_event := undefined,
+                           responses := Responses,
+                           async_mode := sse}) ->
+    {Events, NewStateData} = sse_events(IsFin, Data, StateData),
     FunAdd = fun(Event, Acc) ->
                      queue:in({IsFin, StreamRef, Event}, Acc)
              end,
     NewResponses = lists:foldl(FunAdd, Responses, Events),
-    NewState#{responses => NewResponses};
+    NewStateData#{responses => NewResponses};
 manage_chunk(IsFin, StreamRef, Data,
-             State = #{handle_event := HandleEvent,
-                       async_mode := binary}) ->
+             StateData = #{handle_event := HandleEvent,
+                           async_mode := binary}) ->
     HandleEvent(IsFin, StreamRef, Data),
-    State;
+    StateData;
 manage_chunk(IsFin, StreamRef, Data,
-             State = #{handle_event := HandleEvent,
-                       async_mode := sse}) ->
-    {Events, NewState} = sse_events(IsFin, Data, State),
+             StateData = #{handle_event := HandleEvent,
+                           async_mode := sse}) ->
+    {Events, NewStateData} = sse_events(IsFin, Data, StateData),
     Fun = fun (Event) -> HandleEvent(IsFin, StreamRef, Event) end,
     lists:foreach(Fun, Events),
-
-    NewState.
+    NewStateData.
 
 %% @private
 -spec process_options(map(), headers(), http_verb()) -> map().
@@ -708,20 +702,20 @@ encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
 %% @private
--spec sse_events(fin | nofin, binary(), state()) ->
-    {list(binary()), state()}.
-sse_events(IsFin, Data, State = #{buffer := Buffer}) ->
+-spec sse_events(fin | nofin, binary(), statedata()) ->
+    {list(binary()), statedata()}.
+sse_events(IsFin, Data, StateData = #{buffer := Buffer}) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
     DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
     case {IsFin, lists:reverse(DataList)} of
         {fin, [_]} ->
-            {[<<>>], State#{buffer := NewBuffer}};
+            {[<<>>], StateData#{buffer := NewBuffer}};
         {nofin, [_]} ->
-            {[], State#{buffer := NewBuffer}};
+            {[], StateData#{buffer := NewBuffer}};
         {_, [<<>> | Events]} ->
-            {lists:reverse(Events), State#{buffer := <<"">>}};
+            {lists:reverse(Events), StateData#{buffer := <<"">>}};
         {_, [Rest | Events]} ->
-            {lists:reverse(Events), State#{buffer := Rest}}
+            {lists:reverse(Events), StateData#{buffer := Rest}}
     end.
 
 %% @private
@@ -734,30 +728,34 @@ check_uri(U) ->
   end.
 
 %% @private
--spec enqueue_work_or_stop(atom(), term(), pid(), state()) ->
-    {stop, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-enqueue_work_or_stop(StateName = at_rest, Event, From, State) ->
-    enqueue_work_or_stop(StateName, Event, From, State, 0);
-enqueue_work_or_stop(StateName, Event, From, State) ->
-    enqueue_work_or_stop(StateName, Event, From, State, infinity).
+-spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata()) ->
+    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]}.
+enqueue_work_or_stop(_StateName, get_events, From, #{responses := Responses} = StateData) ->
+    Reply = queue:to_list(Responses),
+    {keep_state, StateData#{responses := queue:new()}, [{reply, From, Reply}]};
+enqueue_work_or_stop(StateName = at_rest, Event, From, StateData) ->
+    enqueue_work_or_stop(StateName, Event, From, StateData, 0);
+enqueue_work_or_stop(StateName, Event, From, StateData) ->
+    enqueue_work_or_stop(StateName, Event, From, StateData, infinity).
 
 %% @private
--spec enqueue_work_or_stop(atom(), term(), pid(), state(), timeout()) ->
-    {reply, {error, any()}, atom(), state()} |
-    {next_state, atom(), state(), timeout()}.
-enqueue_work_or_stop(StateName, Event, From, State, Timeout) ->
+-spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata(), timeout()) ->
+    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+    {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
+enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     case create_work(Event, From) of
         {ok, Work} ->
-            NewState = append_work(Work, State),
-            {next_state, StateName, NewState, Timeout};
+            NewStateData = append_work(Work, StateData),
+            {keep_state, NewStateData, [{timeout, Timeout, get_work}]};
         not_work ->
             Error = {error, {unexpected, Event}},
-            {reply, Error, StateName, State}
+            {keep_state_and_data, [{reply, From, Error}]}
     end.
 
 %% @private
--spec create_work({atom(), list()}, pid()) ->
+-spec create_work({atom(), list()}, gen_statem:from()) ->
     not_work | {ok, work()}.
 create_work({M = get_async, {HandleEvent, AsyncMode}, Args}, From) ->
     {ok, {M, {HandleEvent, AsyncMode}, Args, From}};
@@ -771,23 +769,23 @@ create_work(_, _) ->
     not_work.
 
 %% @private
--spec get_work(state()) -> no_work | {ok, work(), state()}.
-get_work(State) ->
-    PendingReqs = maps:get(pending_requests, State),
+-spec get_work(statedata()) -> no_work | {ok, work(), statedata()}.
+get_work(StateData) ->
+    PendingReqs = maps:get(pending_requests, StateData),
     case queue:is_empty(PendingReqs) of
         true ->
             no_work;
         false ->
             {{value, Work}, Rest} = queue:out(PendingReqs),
-            NewState = State#{pending_requests => Rest},
-            {ok, Work, NewState}
+            NewStateData = StateData#{pending_requests => Rest},
+            {ok, Work, NewStateData}
     end.
 
 %% @private
--spec append_work(work(), state()) -> state().
-append_work(Work, State) ->
-    #{pending_requests := PendingReqs} = State,
-    State#{pending_requests := queue:in(Work, PendingReqs)}.
+-spec append_work(work(), statedata()) -> statedata().
+append_work(Work, StateData) ->
+    #{pending_requests := PendingReqs} = StateData,
+    StateData#{pending_requests := queue:in(Work, PendingReqs)}.
 
 %% @private
 -spec binary_ltrim(binary()) -> binary().
