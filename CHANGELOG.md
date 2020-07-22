@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/inaka/shotgun/tree/0.5.0) (2020-07-17)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.4.1...0.5.0)
+
+**Merged pull requests:**
+
+- Migrate from gen\_fsm to gen\_statem [\#184](https://github.com/inaka/shotgun/pull/184) ([zurab-darkly](https://github.com/zurab-darkly))
+
 ## [0.4.1](https://github.com/inaka/shotgun/tree/0.4.1) (2020-05-19)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.4.0...0.4.1)
@@ -10,6 +18,7 @@
 
 **Merged pull requests:**
 
+- New minor release 0.4.1? [\#183](https://github.com/inaka/shotgun/pull/183) ([zurab-darkly](https://github.com/zurab-darkly))
 - Left trim optional spaces in event field values [\#182](https://github.com/inaka/shotgun/pull/182) ([zurab-darkly](https://github.com/zurab-darkly))
 - Improve things a bit to be compatible with new hex [\#181](https://github.com/inaka/shotgun/pull/181) ([elbrujohalcon](https://github.com/elbrujohalcon))
 
