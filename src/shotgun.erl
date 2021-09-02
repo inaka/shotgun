@@ -89,7 +89,7 @@
          }.
 
 -type response() :: #{ status_code => integer()
-                     , headers => map()
+                     , headers => proplists:proplist()
                      , body => binary()
                      }.
 
