@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.2](https://github.com/inaka/shotgun/tree/0.5.2) (2021-09-02)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.5.1...0.5.2)
+
+**Closed issues:**
+
+- Return type of response headers [\#188](https://github.com/inaka/shotgun/issues/188)
+
+**Merged pull requests:**
+
+- Fix the type definition of the response headers. [\#189](https://github.com/inaka/shotgun/pull/189) ([mworrell](https://github.com/mworrell))
+
 ## [0.5.1](https://github.com/inaka/shotgun/tree/0.5.1) (2021-09-02)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.5.0...0.5.1)
