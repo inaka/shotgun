@@ -1,11 +1,25 @@
 # Changelog
 
-## [0.5.0](https://github.com/inaka/shotgun/tree/0.5.0) (2020-07-17)
+## [0.5.1](https://github.com/inaka/shotgun/tree/0.5.1) (2021-09-02)
+
+[Full Changelog](https://github.com/inaka/shotgun/compare/0.5.0...0.5.1)
+
+**Closed issues:**
+
+- Publish 0.5.0 release to hex.pm [\#186](https://github.com/inaka/shotgun/issues/186)
+- Update type of shotgun response [\#168](https://github.com/inaka/shotgun/issues/168)
+
+**Merged pull requests:**
+
+- Correct type definition of the type response/0 [\#187](https://github.com/inaka/shotgun/pull/187) ([mworrell](https://github.com/mworrell))
+
+## [0.5.0](https://github.com/inaka/shotgun/tree/0.5.0) (2020-07-22)
 
 [Full Changelog](https://github.com/inaka/shotgun/compare/0.4.1...0.5.0)
 
 **Merged pull requests:**
 
+- Prepare release 0.5.0 [\#185](https://github.com/inaka/shotgun/pull/185) ([zurab-darkly](https://github.com/zurab-darkly))
 - Migrate from gen\_fsm to gen\_statem [\#184](https://github.com/inaka/shotgun/pull/184) ([zurab-darkly](https://github.com/zurab-darkly))
 
 ## [0.4.1](https://github.com/inaka/shotgun/tree/0.4.1) (2020-05-19)
