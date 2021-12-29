@@ -114,7 +114,7 @@ work_queue(Config) ->
     ct:comment("Queued GET should return a ref as well"),
     {ok, Response} = shotgun:get(Conn, <<"/">>),
     #{status_code := 200} = Response,
-    ct:comment("Events frmo the async GET should be there"),
+    ct:comment("Events from the async GET should be there"),
     Events = shotgun:events(Conn),
     21 = length(Events), %% 20 nofin + 1 fin
 

@@ -100,7 +100,7 @@ shotgun:close(Conn).
 
 ### Specifying a Timeout
 
-The `timeout` option can be used to specifiy a value for all types of requests:
+The `timeout` option can be used to specify a value for all types of requests:
 
 ```erlang
 {ok, Conn} = shotgun:open("google.com", 80).
@@ -136,7 +136,7 @@ calling the `shotgun:events/1`. Default value is `undefined`.
 The following is an example of the usage of **shotgun** when consuming SSE.
 
 ```erlang
-{ok, Conn} = shotgun:open("locahost", 8080).
+{ok, Conn} = shotgun:open("localhost", 8080).
 %= {ok,<0.6003.0>}
 
 Options = #{async => true, async_mode => sse}},
