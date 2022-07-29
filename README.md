@@ -139,7 +139,7 @@ The following is an example of the usage of **shotgun** when consuming SSE.
 {ok, Conn} = shotgun:open("localhost", 8080).
 %= {ok,<0.6003.0>}
 
-Options = #{async => true, async_mode => sse}},
+Options = #{async => true, async_mode => sse},
 {ok, Ref} = shotgun:get(Conn, "/events", #{}, Options).
 %= {ok,#Ref<0.0.1.186238>}
 
