@@ -358,13 +358,15 @@ init([{Host, Port, Type, Opts}]) ->
                   http -> tcp;
                   https -> ssl
               end,
-    TransportOpts = maps:get(transport_opts, Opts, []),
+    TcpOpts = maps:get(tcp_opts, Opts, []),
+    TlsOpts = maps:get(tls_opts, Opts, []),
     PassedGunOpts = maps:get(gun_opts, Opts, #{}),
     DefaultGunOpts = #{
-                transport      => GunType,
-                retry          => 1,
-                retry_timeout  => 1,
-                transport_opts => TransportOpts
+                transport     => GunType,
+                retry         => 1,
+                retry_timeout => 1,
+                tcp_opts      => TcpOpts,
+                tls_opts      => TlsOpts
                },
     GunOpts = maps:merge(DefaultGunOpts, PassedGunOpts),
     Timeout = maps:get(timeout, Opts, 5000),
