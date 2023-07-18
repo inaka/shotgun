@@ -67,8 +67,8 @@
 
 -type open_opts()       ::
         #{
-           tcp_opts => [],
-           tls_opts => [],
+           tcp_opts => []
+         , tls_opts => []
            %% timeout is passed to gun:await_up. Default if not specified
            %% is 5000 ms.
          , timeout => timeout()
