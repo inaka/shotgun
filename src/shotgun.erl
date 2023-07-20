@@ -66,9 +66,9 @@
 -type connection_type() :: http | https.
 
 -type open_opts()       ::
-        #{ %% transport_opts are passed to Ranch's TCP transport, which is
-           %% -itself- a thin layer over gen_tcp.
-           transport_opts => []
+        #{
+           tcp_opts => []
+         , tls_opts => []
            %% timeout is passed to gun:await_up. Default if not specified
            %% is 5000 ms.
          , timeout => timeout()
