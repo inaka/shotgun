@@ -18,6 +18,7 @@
         , put/1
         , missing_slash_uri/1
         , complete_coverage/1
+				, gun_down/1
         ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -70,6 +71,22 @@ open(_Config) ->
   ok = shotgun:close(Conn),
 
   {comment, ""}.
+
+-spec gun_down(shotgun_test_utils:config()) -> {comment, string()}.
+gun_down(Config) ->
+  Conn = ?config(conn, Config),
+
+  ct:comment("Should get an error."),
+  {error, _} = shotgun:get(Conn, "/down"),
+
+  ct:comment("Reconnecting ..."),
+	ok = shotgun:reopen("localhost", 8888),
+
+  ct:comment("GET should return 200"),
+	{ok, Response} = shotgun:get(Conn, "/"),
+  #{status_code := 200} = Response,
+
+	{comment, ""}.
 
 -spec basic_auth(shotgun_test_utils:config()) -> {comment, string()}.
 basic_auth(Config) ->

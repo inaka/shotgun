@@ -22,3 +22,7 @@ elvis
 .erlang.mk/
 _build/
 doc
+TAGS
+\#*\#
+.\#*
+*~

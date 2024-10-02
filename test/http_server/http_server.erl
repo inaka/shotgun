@@ -43,6 +43,7 @@ start_phase(start_cowboy_http, _StartType, []) ->
            , {"/basic-auth",           http_basic_auth_handler, []}
            , {"/chunked-sse[/:count]", lasse_handler, [http_sse_handler]}
            , {"/chunked-binary",       http_binary_handler, []}
+					 , {"/down",                 http_down_handler, []}
            ]
          }
         ],
