@@ -11,14 +11,14 @@
 -behaviour(gen_statem).
 
 -export([start/0, stop/0, start_link/4]).
--export([open/2, open/3, open/4, close/1]).
+-export([open/2, open/3, open/4, reopen/3, reopen/4, reopen/5, close/1]).
 -export([get/2, get/3, get/4, post/4, post/5, delete/4, head/4, options/4, patch/4,
          patch/5, put/4, put/5, request/6, data/2, data/3, events/1, parse_event/1]).
 
 % gen_statem callbacks
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
 % gen_statem states
--export([at_rest/3, wait_response/3, receive_data/3, receive_chunk/3]).
+-export([at_rest/3, wait_response/3, receive_data/3, receive_chunk/3, down/3]).
 
 -type connection_type() :: http | https.
 -type open_opts() ::
@@ -75,7 +75,7 @@ start_link(Host, Port, Type, Opts) ->
 %% API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% @equiv get(Host, Port, http, #{})
+%% @equiv open(Host, Port, http, #{})
 -spec open(Host :: string(), Port :: integer()) ->
               {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
 open(Host, Port) ->
@@ -104,6 +104,31 @@ open(Host, Port, Opts) when is_map(Opts) ->
                already_present | {already_started, pid()} | gun_open_failed | gun_open_timeout}.
 open(Host, Port, Type, Opts) ->
     supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
+
+%% @equiv reopen(Pid, Host, Port, http, #{})
+-spec reopen(Pid :: pid(), Host :: string(), Port :: integer()) ->
+                ok | {error, gun_open_failed | gun_open_timeout}.
+reopen(Pid, Host, Port) ->
+    reopen(Pid, Host, Port, http, #{}).
+
+%% @equiv reopen(Pid, Host, Port, Type, #{})
+-spec reopen(Pid :: pid(),
+             Host :: string(),
+             Port :: integer(),
+             Type :: connection_type()) ->
+                ok | {error, gun_open_failed | gun_open_timeout}.
+reopen(Pid, Host, Port, Type) ->
+    reopen(Pid, Host, Port, Type, #{}).
+
+%% @doc Reopen a connection that was closed by gun before.
+-spec reopen(Pid :: pid(),
+             Host :: string(),
+             Port :: integer(),
+             Type :: connection_type(),
+             Opts :: open_opts()) ->
+                ok | {error, gun_open_failed | gun_open_timeout}.
+reopen(Pid, Host, Port, Type, Opts) ->
+    gen_statem:call(Pid, {reopen, Host, Port, Type, Opts}).
 
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
@@ -303,9 +328,25 @@ callback_mode() ->
     state_functions.
 
 %% @private
--spec init([{string(), integer(), connection_type(), open_opts()}]) ->
+-spec init([{Host :: string(),
+             Port :: integer(),
+             Type :: connection_type(),
+             Opts :: open_opts()}]) ->
               {ok, at_rest, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
 init([{Host, Port, Type, Opts}]) ->
+    case open_connection(Host, Port, Type, Opts) of
+        {ok, StateData} ->
+            {ok, at_rest, StateData};
+        {error, Error} ->
+            {stop, Error}
+    end.
+
+-spec open_connection(Host :: string(),
+                      Port :: integer(),
+                      Type :: connection_type(),
+                      Opts :: open_opts()) ->
+                         {ok, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
+open_connection(Host, Port, Type, Opts) ->
     GunType =
         case Type of
             http ->
@@ -329,36 +370,37 @@ init([{Host, Port, Type, Opts}]) ->
     case gun:await_up(Pid, Timeout) of
         {ok, _} ->
             StateData = clean_state_data(),
-            {ok, at_rest, StateData#{pid => Pid}};
+            {ok, StateData#{pid => Pid}};
         %The only apparent timeout for gun:open is the connection timeout of the
         %underlying transport. So, a timeout message here comes from gun:await_up.
         {error, timeout} ->
-            {stop, gun_open_timeout};
+            {error, gun_open_timeout};
         %gun currently terminates with reason normal if gun:open fails to open
         %the requested connection. This bubbles up through gun:await_up.
         {error, normal} ->
-            {stop, gun_open_failed};
+            {error, gun_open_failed};
         %gun can terminate with reason {shutdown, nxdomain}; however, that's not
         %explicitly specced and makes dialyzer unhappy, so we loosely pattern
         %match it here.
         {error, _} ->
-            {stop, gun_open_failed}
+            {error, gun_open_failed}
     end.
 
 %% @private
 -spec handle_info(term(), atom(), term()) -> {next_state, atom(), statedata()}.
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
-handle_info({gun_down, Pid, Protocol, {error, Reason}, KilledStreams, UnprocessedStreams},
-            StateName,
+handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
+            _StateName,
             StateData = #{pid := Pid}) ->
-    error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p, Unprocessed: ~p)",
-                             [Protocol, Pid, Reason, KilledStreams, UnprocessedStreams]),
-    {next_state, StateName, StateData};
-handle_info({gun_down, Pid, _, _, _, _}, StateName, StateData = #{pid := Pid}) ->
-    {next_state, StateName, StateData};
+    error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p)",
+                             [Protocol, Pid, Reason, KilledStreams]),
+    gun:shutdown(Pid),
+    CleanStateData = clean_state_data(StateData),
+    {next_state, down, CleanStateData};
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
+    % forward messages to state machine
     Module:StateName(cast, Event, StateData).
 
 %% @private
@@ -400,6 +442,13 @@ at_rest(timeout, _Event, StateData) ->
     end;
 at_rest(cast, shutdown, _StateData) ->
     stop;
+% this state transition is not expected because gun messages change state to 'down'.
+% but just in case ...
+at_rest(cast, {gun_down, _Args, _From}, StateData = #{pid := Pid}) ->
+    % cleanup gun process
+    gun:shutdown(Pid),
+    CleanStateData = clean_state_data(StateData),
+    {next_state, down, CleanStateData};
 at_rest(cast,
         {get_async, {HandleEvent, AsyncMode}, Args, From},
         StateData = #{pid := Pid}) ->
@@ -551,6 +600,32 @@ receive_chunk(cast, {gun_error, _Pid, _StreamRef, _Reason}, StateData) ->
     {next_state, at_rest, StateData, [{timeout, 0, 0}]};
 receive_chunk(info, Event, StateData) ->
     handle_info(Event, receive_chunk, StateData).
+
+%% @private
+-spec down({call, From :: gen_statem:from()},
+           {reopen,
+            Host :: string(),
+            Port :: integer(),
+            Type :: connection_type(),
+            Opts :: open_opts()},
+           StateData :: statedata()) ->
+              {ok, at_rest, statedata()} | {error, gun_open_timeout | gun_open_failed | gun_down};
+          (cast | info, Event :: term(), StateData :: statedata()) ->
+              {error, gun_down} | {keep_state, statedata()}.
+down({call, From}, {reopen, Host, Port, Type, Opts}, StateData) ->
+    case open_connection(Host, Port, Type, Opts) of
+        % always send the result to the initial process From
+        {ok, NewStateData} ->
+            {next_state, at_rest, NewStateData, [{reply, From, {ok, self()}}]};
+        Error ->
+            {keep_state, StateData, [{reply, From, Error}]}
+    end;
+down({call, From}, _Event, StateData) ->
+    {keep_state, StateData, {reply, From, {error, gun_down}}};
+down(cast, _Event, StateData) ->
+    {keep_state, StateData};
+down(info, Event, StateData) ->
+    handle_info(Event, down, StateData).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private

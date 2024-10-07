@@ -3,7 +3,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
          end_per_testcase/2]).
 -export([open/1, basic_auth/1, get/1, post/1, delete/1, head/1, options/1, patch/1, put/1,
-         missing_slash_uri/1, complete_coverage/1]).
+         missing_slash_uri/1, complete_coverage/1, gun_down/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
@@ -47,11 +47,12 @@ end_per_testcase(_, Config) ->
 
 -spec open(shotgun_test_utils:config()) -> {comment, string()}.
 open(_Config) ->
+    Port = application:get_env(http_server, http_port, 8888),
     {error, gun_open_failed} = shotgun:open("whatever", 8888),
 
     {error, gun_open_timeout} = shotgun:open("google.com", 8888, #{timeout => 1}),
 
-    {ok, Conn} = shotgun:open("localhost", 8888),
+    {ok, Conn} = shotgun:open("localhost", Port),
     ok = shotgun:close(Conn),
 
     {comment, ""}.
@@ -178,5 +179,28 @@ complete_coverage(Config) ->
 
     ct:comment("gen_server's code_change"),
     {ok, at_rest, #{}} = shotgun:code_change(old_vsn, at_rest, #{}, extra),
+
+    {comment, ""}.
+
+-spec gun_down(shotgun_test_utils:config()) -> {comment, string()}.
+gun_down(Config) ->
+    Conn = ?config(conn, Config),
+
+    ok = http_server:stop_listener(),
+
+    % wait until gun_down detected
+    timer:sleep(1000),
+
+    ct:comment("Should get an error."),
+    {error, gun_down} = shotgun:get(Conn, "/"),
+
+    ok = http_server:start_listener(),
+
+    ct:comment("Reconnecting ..."),
+    Port = application:get_env(http_server, http_port, 8888),
+    {ok, _Pid} = shotgun:reopen(Conn, "localhost", Port),
+
+    {ok, Response} = shotgun:get(Conn, "/"),
+    #{status_code := 200} = Response,
 
     {comment, ""}.

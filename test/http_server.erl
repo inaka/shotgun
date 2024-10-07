@@ -1,7 +1,7 @@
 -module(http_server).
 
 -export([start/0, stop/0]).
--export([start/2, stop/1, start_phase/3]).
+-export([start/2, stop/1, start_phase/3, stop_listener/0, start_listener/0]).
 
 %%------------------------------------------------------------------------------
 %% Application
@@ -29,8 +29,11 @@ stop(_State) ->
 
 -spec start_phase(atom(), application:start_type(), []) -> ok | {error, term()}.
 start_phase(start_cowboy_http, _StartType, []) ->
+    start_listener().
+
+-spec start_listener() -> ok | {error, term()}.
+start_listener() ->
     Port = application:get_env(http_server, http_port, 8888),
-    ListenerCount = application:get_env(http_server, http_listener_count, 10),
     Routes =
         [{'_',
           [{"/", http_simple_handler, []},
@@ -42,3 +45,7 @@ start_phase(start_cowboy_http, _StartType, []) ->
     ProtocolOptions = #{env => #{dispatch => Dispatch}},
     {ok, _} = cowboy:start_clear(http_server, TransportOptions, ProtocolOptions),
     ok.
+
+-spec stop_listener() -> ok | {error, any()}.
+stop_listener() ->
+    cowboy:stop_listener(http_server).
