@@ -34,7 +34,6 @@ start_phase(start_cowboy_http, _StartType, []) ->
 -spec start_listener() -> ok | {error, term()}.
 start_listener() ->
     Port = application:get_env(http_server, http_port, 8888),
-    _ListenerCount = application:get_env(http_server, http_listener_count, 10),
     Routes =
         [{'_',
           [{"/", http_simple_handler, []},

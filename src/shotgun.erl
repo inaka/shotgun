@@ -395,7 +395,6 @@ handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
             StateData = #{pid := Pid}) ->
     error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p)",
                              [Protocol, Pid, Reason, KilledStreams]),
-    %		demonitor(Pid, [flush]),
     gun:shutdown(Pid),
     CleanStateData = clean_state_data(StateData),
     {next_state, down, CleanStateData};
@@ -447,7 +446,6 @@ at_rest(cast, shutdown, _StateData) ->
 % but just in case ...
 at_rest(cast, {gun_down, _Args, _From}, StateData = #{pid := Pid}) ->
     % cleanup gun process
-    %		demonitor(Pid, [flush]),
     gun:shutdown(Pid),
     CleanStateData = clean_state_data(StateData),
     {next_state, down, CleanStateData};
