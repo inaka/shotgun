@@ -13,25 +13,7 @@
 -export([start/0, stop/0, start_link/4]).
 -export([open/2, open/3, open/4, close/1]).
 -export([get/2, get/3, get/4, post/4, post/5, delete/4, head/4, options/4, patch/4,
-         patch/5, put/4, put/5, request/6, data/2, data/3, events/1, parse_event/1]). %% get
-
-          %% post
-
-          %% delete
-
-          %% head
-
-          %% options
-
-          %% patch
-
-          %% put
-
-          %% generic request
-
-          %% data
-
-          %% events
+         patch/5, put/4, put/5, request/6, data/2, data/3, events/1, parse_event/1]).
 
 % gen_statem callbacks
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
@@ -59,10 +41,7 @@
     #{async => boolean(),
       async_mode => binary | sse,
       handle_event => fun((fin | nofin, reference(), binary()) -> any()),
-      timeout => timeout()}.
-
-                                %% Default 5000 ms
-
+      timeout => timeout()}. %% Default 5000 ms
 -type response() ::
     #{status_code => integer(),
       headers => proplists:proplist(),
