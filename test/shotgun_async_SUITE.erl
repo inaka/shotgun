@@ -1,18 +1,8 @@
 -module(shotgun_async_SUITE).
 
--export([ all/0
-        , init_per_suite/1
-        , end_per_suite/1
-        , init_per_testcase/2
-        , end_per_testcase/2
-        ]).
-
--export([ get_sse/1
-        , get_binary/1
-        , work_queue/1
-        , get_handle_event/1
-        , async_unsupported/1
-        ]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+         end_per_testcase/2]).
+-export([get_sse/1, get_binary/1, work_queue/1, get_handle_event/1, async_unsupported/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
@@ -21,31 +11,30 @@
 %%------------------------------------------------------------------------------
 
 -spec all() -> [atom()].
-all() -> shotgun_test_utils:all(?MODULE).
+all() ->
+    shotgun_test_utils:all(?MODULE).
 
--spec init_per_suite(shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
+-spec init_per_suite(shotgun_test_utils:config()) -> shotgun_test_utils:config().
 init_per_suite(Config) ->
     {ok, _} = shotgun:start(),
     {ok, _} = http_server:start(),
     Config.
 
--spec end_per_suite(shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
+-spec end_per_suite(shotgun_test_utils:config()) -> shotgun_test_utils:config().
 end_per_suite(Config) ->
     ok = shotgun:stop(),
     ok = http_server:stop(),
     Config.
 
 -spec init_per_testcase(atom(), shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
+                           shotgun_test_utils:config().
 init_per_testcase(_, Config) ->
     Port = application:get_env(http_server, http_port, 8888),
     {ok, Conn} = shotgun:open("localhost", Port),
     [{conn, Conn} | Config].
 
 -spec end_per_testcase(atom(), shotgun_test_utils:config()) ->
-    shotgun_test_utils:config().
+                          shotgun_test_utils:config().
 end_per_testcase(_, Config) ->
     Conn = ?config(conn, Config),
     ok = shotgun:close(Conn),
@@ -126,16 +115,19 @@ get_handle_event(Config) ->
     Self = self(),
 
     ct:comment("SSE: GET should return a ref"),
-    HandleEvent = fun(_, _, EventBin) ->
-                          case shotgun:parse_event(EventBin) of
-                              #{id := Data} -> Self ! Data;
-                              _  -> ok
-                          end
-                  end,
-    Opts = #{ async        => true
-            , async_mode   => sse
-            , handle_event => HandleEvent
-            },
+    HandleEvent =
+        fun(_, _, EventBin) ->
+           case shotgun:parse_event(EventBin) of
+               #{id := Data} ->
+                   Self ! Data;
+               _ ->
+                   ok
+           end
+        end,
+    Opts =
+        #{async => true,
+          async_mode => sse,
+          handle_event => HandleEvent},
     {ok, _Ref} = shotgun:get(Conn, <<"/chunked-sse/3">>, #{}, Opts),
 
     timer:sleep(500),
@@ -147,10 +139,10 @@ get_handle_event(Config) ->
 
     ct:comment("SSE: GET should return a ref"),
     HandleEventBin = fun(_, _, Data) -> Self ! Data end,
-    OptsBin = #{ async        => true
-               , async_mode   => binary
-               , handle_event => HandleEventBin
-               },
+    OptsBin =
+        #{async => true,
+          async_mode => binary,
+          handle_event => HandleEventBin},
     {ok, _RefBin} = shotgun:get(Conn, <<"/chunked-binary">>, #{}, OptsBin),
     timer:sleep(500),
 
@@ -165,13 +157,9 @@ async_unsupported(Config) ->
     Conn = ?config(conn, Config),
 
     ct:comment("Async POST should return an error"),
-    { error
-    , {async_unsupported, post}
-    } = shotgun:post(Conn, "/", #{}, <<>>, #{async => true}),
+    {error, {async_unsupported, post}} = shotgun:post(Conn, "/", #{}, <<>>, #{async => true}),
 
     ct:comment("Async PUT should return an error"),
-    { error
-    , {async_unsupported, put}
-    } = shotgun:put(Conn, "/", #{}, <<>>, #{async => true}),
+    {error, {async_unsupported, put}} = shotgun:put(Conn, "/", #{}, <<>>, #{async => true}),
 
     {comment, ""}.

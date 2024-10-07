@@ -4,104 +4,75 @@
 %%%      Use the functions provided in this module to open a connection and make
 %%%      requests.
 -module(shotgun).
+
 -author("federico@inaka.net").
 -author("juan@inaka.net").
 
 -behaviour(gen_statem).
 
--export([ start/0
-        , stop/0
-        , start_link/4
-        ]).
+-export([start/0, stop/0, start_link/4]).
+-export([open/2, open/3, open/4, close/1]).
+-export([get/2, get/3, get/4, post/4, post/5, delete/4, head/4, options/4, patch/4,
+         patch/5, put/4, put/5, request/6, data/2, data/3, events/1, parse_event/1]). %% get
 
--export([ open/2
-        , open/3
-        , open/4
-        , close/1
-        ]).
-
--export([ %% get
-          get/2
-        , get/3
-        , get/4
           %% post
-        , post/4
-        , post/5
+
           %% delete
-        , delete/4
+
           %% head
-        , head/4
+
           %% options
-        , options/4
+
           %% patch
-        , patch/4
-        , patch/5
+
           %% put
-        , put/4
-        , put/5
+
           %% generic request
-        , request/6
+
           %% data
-        , data/2
-        , data/3
+
           %% events
-        , events/1
-        , parse_event/1
-        ]).
 
 % gen_statem callbacks
--export([ init/1
-        , callback_mode/0
-        , terminate/3
-        , code_change/4
-        ]).
-
+-export([init/1, callback_mode/0, terminate/3, code_change/4]).
 % gen_statem states
--export([ at_rest/3
-        , wait_response/3
-        , receive_data/3
-        , receive_chunk/3
-        ]).
+-export([at_rest/3, wait_response/3, receive_data/3, receive_chunk/3]).
 
 -type connection_type() :: http | https.
+-type open_opts() ::
+    #{tcp_opts => [],
+      tls_opts => [],
+      timeout => timeout(),
+      gun_opts => gun:opts()}.
 
--type open_opts()       ::
-        #{
-           tcp_opts => []
-         , tls_opts => []
            %% timeout is passed to gun:await_up. Default if not specified
            %% is 5000 ms.
-         , timeout => timeout()
+
            %% gun_opts are passed to gun:open
-         , gun_opts => gun:opts()
-         }.
 
 -type connection() :: pid().
--type http_verb()  :: get | post | head | delete | patch | put | options.
--type uri()        :: iodata().
--type headers()    :: #{_ => _} | proplists:proplist().
--type body()       :: iodata() | body_chunked.
--type options()    ::
-        #{ async => boolean()
-         , async_mode => binary | sse
-         , handle_event => fun((fin | nofin, reference(), binary()) -> any())
-         , timeout => timeout() %% Default 5000 ms
-         }.
+-type http_verb() :: get | post | head | delete | patch | put | options.
+-type uri() :: iodata().
+-type headers() :: #{_ => _} | proplists:proplist().
+-type body() :: iodata() | body_chunked.
+-type options() ::
+    #{async => boolean(),
+      async_mode => binary | sse,
+      handle_event => fun((fin | nofin, reference(), binary()) -> any()),
+      timeout => timeout()}.
 
--type response() :: #{ status_code => integer()
-                     , headers => proplists:proplist()
-                     , body => binary()
-                     }.
+                                %% Default 5000 ms
 
--type result()   :: {ok, reference() | response()} | {error, term()}.
-
--type event()    :: #{ id    => binary()
-                     , event => binary()
-                     , data  => binary()
-                     }.
-
--type work()  :: {atom(), list(), pid()} |
-                 {atom(), {module(), boolean()}, list(), pid()}.
+-type response() ::
+    #{status_code => integer(),
+      headers => proplists:proplist(),
+      body => binary()}.
+-type result() :: {ok, reference() | response()} | {error, term()}.
+-type event() ::
+    #{id => binary(),
+      event => binary(),
+      data => binary()}.
+-type work() :: {atom(), list(), pid()} | {atom(), {module(), boolean()}, list(), pid()}.
 
 -export_type([response/0, event/0]).
 
@@ -117,7 +88,7 @@ stop() ->
 
 %% @private
 -spec start_link(string(), integer(), connection_type(), open_opts()) ->
-    {ok, pid()} | ignore | {error, term()}.
+                    {ok, pid()} | ignore | {error, term()}.
 start_link(Host, Port, Type, Opts) ->
     gen_statem:start_link(shotgun, [{Host, Port, Type, Opts}], []).
 
@@ -127,29 +98,31 @@ start_link(Host, Port, Type, Opts) ->
 
 %% @equiv get(Host, Port, http, #{})
 -spec open(Host :: string(), Port :: integer()) ->
-    {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
+              {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
 open(Host, Port) ->
     open(Host, Port, http).
 
 -spec open(Host :: string(), Port :: integer(), Type :: connection_type()) ->
-    {ok, pid()} | {error, gun_open_failed | gun_open_timeout};
-    (Host :: string(), Port :: integer(), Opts :: open_opts()) ->
-    {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
+              {ok, pid()} | {error, gun_open_failed | gun_open_timeout};
+          (Host :: string(), Port :: integer(), Opts :: open_opts()) ->
+              {ok, pid()} | {error, gun_open_failed | gun_open_timeout}.
 %% @equiv get(Host, Port, Type, #{}) or get(Host, Port, http, Opts)
 open(Host, Port, Type) when is_atom(Type) ->
-  open(Host, Port, Type, #{});
-
+    open(Host, Port, Type, #{});
 open(Host, Port, Opts) when is_map(Opts) ->
-  open(Host, Port, http, Opts).
+    open(Host, Port, http, Opts).
 
 %% @doc Opens a connection of the type provided with the host and port
 %% specified and the specified connection timeout and/or Ranch
 %% transport options.
--spec open(Host :: string(), Port :: integer(), Type :: connection_type(),
+-spec open(Host :: string(),
+           Port :: integer(),
+           Type :: connection_type(),
            Opts :: open_opts()) ->
-    {ok, pid()} | {ok, pid(), term()} |
-    {error, already_present | {already_started, pid()} |
-            gun_open_failed | gun_open_timeout}.
+              {ok, pid()} |
+              {ok, pid(), term()} |
+              {error,
+               already_present | {already_started, pid()} | gun_open_failed | gun_open_timeout}.
 open(Host, Port, Type, Opts) ->
     supervisor:start_child(shotgun_sup, [Host, Port, Type, Opts]).
 
@@ -256,8 +229,7 @@ put(Pid, Uri, Headers, Body, Options) ->
 %% @doc Performs a request to <code>Uri</code> using the HTTP method
 %% specified by <code>Method</code>,  <code>Body</code> as the content data and
 %% <code>Headers</code> as the request's headers.
--spec request(connection(), http_verb(), uri(), headers(), body(), options()) ->
-    result().
+-spec request(connection(), http_verb(), uri(), headers(), body(), options()) -> result().
 request(Pid, get, Uri, Headers0, Body, Options) ->
     try
         check_uri(Uri),
@@ -265,29 +237,30 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
           async := IsAsync,
           async_mode := AsyncMode,
           headers := Headers,
-          timeout := Timeout} = process_options(Options, Headers0, get),
+          timeout := Timeout} =
+            process_options(Options, Headers0, get),
 
-        Event = case IsAsync of
-                    true ->
-                        {get_async,
-                         {HandleEvent, AsyncMode},
-                         {Uri, Headers, Body}};
-                    false ->
-                        {get, {Uri, Headers, Body}}
-                end,
+        Event =
+            case IsAsync of
+                true ->
+                    {get_async, {HandleEvent, AsyncMode}, {Uri, Headers, Body}};
+                false ->
+                    {get, {Uri, Headers, Body}}
+            end,
         gen_statem:call(Pid, Event, Timeout)
     catch
-        _:Reason -> {error, Reason}
+        _:Reason ->
+            {error, Reason}
     end;
 request(Pid, Method, Uri, Headers0, Body, Options) ->
     try
         check_uri(Uri),
-        #{headers := Headers, timeout := Timeout} =
-          process_options(Options, Headers0, Method),
+        #{headers := Headers, timeout := Timeout} = process_options(Options, Headers0, Method),
         Event = {Method, {Uri, Headers, Body}},
         gen_statem:call(Pid, Event, Timeout)
     catch
-        _:Reason -> {error, Reason}
+        _:Reason ->
+            {error, Reason}
     end.
 
 %% @doc Send data when the
@@ -313,19 +286,17 @@ parse_event(EventBin) ->
     Lines = binary:split(EventBin, <<"\n">>, [global]),
     FoldFun =
         fun(Line, #{data := Data} = Event) ->
-                case Line of
-                    <<"data:", NewData/binary>> ->
-                        TrimmedNewData = binary_ltrim(NewData),
-                        Event#{
-                            data => <<Data/binary, TrimmedNewData/binary, "\n">>
-                        };
-                    <<"id:", Id/binary>> ->
-                        Event#{id => binary_ltrim(Id)};
-                    <<"event:", EventName/binary>> ->
-                        Event#{event => binary_ltrim(EventName)};
-                    <<_Comment/binary>> ->
-                        Event
-                end
+           case Line of
+               <<"data:", NewData/binary>> ->
+                   TrimmedNewData = binary_ltrim(NewData),
+                   Event#{data => <<Data/binary, TrimmedNewData/binary, "\n">>};
+               <<"id:", Id/binary>> ->
+                   Event#{id => binary_ltrim(Id)};
+               <<"event:", EventName/binary>> ->
+                   Event#{event => binary_ltrim(EventName)};
+               <<_Comment/binary>> ->
+                   Event
+           end
         end,
     lists:foldl(FoldFun, #{data => <<>>}, Lines).
 
@@ -333,79 +304,79 @@ parse_event(EventBin) ->
 %% gen_statem callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--type statedata() :: #{ async            => boolean()
-                      , async_mode       => false | binary | sse
-                      , buffer           => binary()
-                      , data             => binary()
-                      , from             => term()
-                      , handle_event     => term()
-                      , headers          => term()
-                      , pending_requests => queue:queue() | undefined
-                      , pid              => pid() | undefined
-                      , responses        => queue:queue() | undefined
-                      , status_code      => integer() | undefined
-                      , stream           => reference() | undefined}.
+-type statedata() ::
+    #{async => boolean(),
+      async_mode => false | binary | sse,
+      buffer => binary(),
+      data => binary(),
+      from => term(),
+      handle_event => term(),
+      headers => term(),
+      pending_requests => queue:queue() | undefined,
+      pid => pid() | undefined,
+      responses => queue:queue() | undefined,
+      status_code => integer() | undefined,
+      stream => reference() | undefined}.
 
 %% @private
 -spec callback_mode() -> state_functions.
-callback_mode() -> state_functions.
+callback_mode() ->
+    state_functions.
 
 %% @private
 -spec init([{string(), integer(), connection_type(), open_opts()}]) ->
-    {ok, at_rest, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
+              {ok, at_rest, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
 init([{Host, Port, Type, Opts}]) ->
-    GunType = case Type of
-                  http -> tcp;
-                  https -> ssl
-              end,
+    GunType =
+        case Type of
+            http ->
+                tcp;
+            https ->
+                ssl
+        end,
     TcpOpts = maps:get(tcp_opts, Opts, []),
     TlsOpts = maps:get(tls_opts, Opts, []),
     PassedGunOpts = maps:get(gun_opts, Opts, #{}),
-    DefaultGunOpts = #{
-                transport     => GunType,
-                retry         => 1,
-                retry_timeout => 1,
-                tcp_opts      => TcpOpts,
-                tls_opts      => TlsOpts
-               },
+    DefaultGunOpts =
+        #{transport => GunType,
+          retry => 1,
+          retry_timeout => 1,
+          tcp_opts => TcpOpts,
+          tls_opts => TlsOpts},
     GunOpts = maps:merge(DefaultGunOpts, PassedGunOpts),
     Timeout = maps:get(timeout, Opts, 5000),
     {ok, Pid} = gun:open(Host, Port, GunOpts),
     _ = monitor(process, Pid),
     case gun:await_up(Pid, Timeout) of
-      {ok, _} ->
-        StateData = clean_state_data(),
-        {ok, at_rest, StateData#{pid => Pid}};
-      %The only apparent timeout for gun:open is the connection timeout of the
-      %underlying transport. So, a timeout message here comes from gun:await_up.
-      {error, timeout} ->
-        {stop, gun_open_timeout};
-      %gun currently terminates with reason normal if gun:open fails to open
-      %the requested connection. This bubbles up through gun:await_up.
-      {error, normal} ->
-        {stop, gun_open_failed};
-      %gun can terminate with reason {shutdown, nxdomain}; however, that's not
-      %explicitly specced and makes dialyzer unhappy, so we loosely pattern
-      %match it here.
-      {error, _} ->
-        {stop, gun_open_failed}
+        {ok, _} ->
+            StateData = clean_state_data(),
+            {ok, at_rest, StateData#{pid => Pid}};
+        %The only apparent timeout for gun:open is the connection timeout of the
+        %underlying transport. So, a timeout message here comes from gun:await_up.
+        {error, timeout} ->
+            {stop, gun_open_timeout};
+        %gun currently terminates with reason normal if gun:open fails to open
+        %the requested connection. This bubbles up through gun:await_up.
+        {error, normal} ->
+            {stop, gun_open_failed};
+        %gun can terminate with reason {shutdown, nxdomain}; however, that's not
+        %explicitly specced and makes dialyzer unhappy, so we loosely pattern
+        %match it here.
+        {error, _} ->
+            {stop, gun_open_failed}
     end.
 
 %% @private
--spec handle_info(term(), atom(), term()) ->
-    {next_state, atom(), statedata()}.
+-spec handle_info(term(), atom(), term()) -> {next_state, atom(), statedata()}.
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
-handle_info(
-    {gun_down, Pid, Protocol, {error, Reason},
-     KilledStreams, UnprocessedStreams}, StateName,
-    StateData = #{pid := Pid}) ->
-    error_logger:warning_msg(
-        "~p connection down on ~p: ~p (Killed: ~p, Unprocessed: ~p)",
-        [Protocol, Pid, Reason, KilledStreams, UnprocessedStreams]),
+handle_info({gun_down, Pid, Protocol, {error, Reason}, KilledStreams, UnprocessedStreams},
+            StateName,
+            StateData = #{pid := Pid}) ->
+    error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p, Unprocessed: ~p)",
+                             [Protocol, Pid, Reason, KilledStreams, UnprocessedStreams]),
     {next_state, StateName, StateData};
-handle_info(
-    {gun_down, Pid, _, _, _, _}, StateName, StateData = #{pid := Pid}) ->
+handle_info({gun_down, Pid, _, _, _, _}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
@@ -430,11 +401,12 @@ terminate(_Reason, _StateName, #{pid := Pid} = _StateData) ->
 %If we don't, stay in at_rest.
 %% @private
 -spec at_rest({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
-    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
-    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
-    stop |
-    {next_state, atom(), statedata()}.
+                 {keep_state_and_data,
+                  [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+                 {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+                 {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+                 stop |
+                 {next_state, atom(), statedata()}.
 at_rest({call, From}, Event, StateData) ->
     enqueue_work_or_stop(at_rest, Event, From, StateData);
 at_rest(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
@@ -449,30 +421,31 @@ at_rest(timeout, _Event, StateData) ->
     end;
 at_rest(cast, shutdown, _StateData) ->
     stop;
-at_rest(cast, {get_async, {HandleEvent, AsyncMode}, Args, From},
+at_rest(cast,
+        {get_async, {HandleEvent, AsyncMode}, Args, From},
         StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
     CleanStateData = clean_state_data(StateData),
-    NewStateData = CleanStateData#{
-                     from => From,
-                     pid => Pid,
-                     stream => StreamRef,
-                     handle_event => HandleEvent,
-                     async => true,
-                     async_mode => AsyncMode
-                    },
+    NewStateData =
+        CleanStateData#{from => From,
+                        pid => Pid,
+                        stream => StreamRef,
+                        handle_event => HandleEvent,
+                        async => true,
+                        async_mode => AsyncMode},
     {next_state, wait_response, NewStateData};
 at_rest(cast, {HttpVerb, {_, _, Body} = Args, From}, StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
     CleanStateData = clean_state_data(StateData),
-    NewStateData = CleanStateData#{ pid    => Pid
-                                  , stream => StreamRef
-                                  , from   => From
-                                  },
+    NewStateData =
+        CleanStateData#{pid => Pid,
+                        stream => StreamRef,
+                        from => From},
     case Body of
         body_chunked ->
             gen_statem:cast(self(), body_chunked);
-        _ -> ok
+        _ ->
+            ok
     end,
     {next_state, wait_response, NewStateData};
 at_rest(info, Event, StateData) ->
@@ -480,15 +453,16 @@ at_rest(info, Event, StateData) ->
 
 %% @private
 -spec wait_response({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
-    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
-    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
-    stop |
-    {stop, {unexpected, any()}, statedata()} |
-    {next_state, atom(), statedata()}.
-wait_response({call, From}
-              , {data, Data, FinNoFin}
-              , #{stream := StreamRef, pid := Pid} = StateData) ->
+                       {keep_state_and_data,
+                        [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+                       {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+                       {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+                       stop |
+                       {stop, {unexpected, any()}, statedata()} |
+                       {next_state, atom(), statedata()}.
+wait_response({call, From},
+              {data, Data, FinNoFin},
+              #{stream := StreamRef, pid := Pid} = StateData) ->
     ok = gun:data(Pid, StreamRef, FinNoFin, Data),
     {next_state, wait_response, StateData, [{reply, From, ok}]};
 wait_response({call, From}, Event, StateData) ->
@@ -497,30 +471,32 @@ wait_response(cast, shutdown, _StateData) ->
     stop;
 wait_response(cast, {'DOWN', _, _, _, Reason}, _StateData) ->
     exit(Reason);
-wait_response(cast, {gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
+wait_response(cast,
+              {gun_response, _Pid, _StreamRef, fin, StatusCode, Headers},
               #{from := From} = StateData) ->
     Response = #{status_code => StatusCode, headers => Headers},
     {next_state, at_rest, StateData, [{reply, From, {ok, Response}}]};
-wait_response(cast, {gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
-              #{from := From, stream := StreamRef, async := Async} = StateData) ->
+wait_response(cast,
+              {gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
+              #{from := From,
+                stream := StreamRef,
+                async := Async} =
+                  StateData) ->
     {StateName, Actions} =
-      case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
-          {<<"transfer-encoding">>, <<"chunked">>} when Async ->
-              Result = {ok, StreamRef},
-              {receive_chunk, [{reply, From, Result}]};
-          _ ->
-              {receive_data, []}
-      end,
-    { next_state
-    , StateName
-    , StateData#{status_code := StatusCode, headers := Headers}
-    , Actions
-    };
-wait_response(cast, {gun_error, _Pid, _StreamRef, Error},
-              #{from := From} = StateData) ->
+        case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
+            {<<"transfer-encoding">>, <<"chunked">>} when Async ->
+                Result = {ok, StreamRef},
+                {receive_chunk, [{reply, From, Result}]};
+            _ ->
+                {receive_data, []}
+        end,
+    {next_state,
+     StateName,
+     StateData#{status_code := StatusCode, headers := Headers},
+     Actions};
+wait_response(cast, {gun_error, _Pid, _StreamRef, Error}, #{from := From} = StateData) ->
     {next_state, at_rest, StateData, [{reply, From, {error, Error}}]};
-wait_response(cast, body_chunked,
-              #{stream := StreamRef, from := From} = StateData) ->
+wait_response(cast, body_chunked, #{stream := StreamRef, from := From} = StateData) ->
     {next_state, wait_response, StateData, [{reply, From, {ok, StreamRef}}]};
 wait_response(cast, Event, StateData) ->
     {stop, {unexpected, Event}, StateData};
@@ -530,31 +506,39 @@ wait_response(info, Event, StateData) ->
 %% @private
 %% @doc Regular response
 -spec receive_data({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
-    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
-    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
-    stop |
-    {next_state, atom(), statedata()}.
+                      {keep_state_and_data,
+                       [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+                      {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+                      {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+                      stop |
+                      {next_state, atom(), statedata()}.
 receive_data({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_data, Event, From, StateData);
 receive_data(cast, shutdown, _StateData) ->
     stop;
 receive_data(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
     error(incomplete);
-receive_data(cast, {gun_data, _Pid, StreamRef, nofin, Data},
+receive_data(cast,
+             {gun_data, _Pid, StreamRef, nofin, Data},
              #{stream := StreamRef, data := DataAcc} = StateData) ->
     NewData = <<DataAcc/binary, Data/binary>>,
     {next_state, receive_data, StateData#{data => NewData}};
-receive_data(cast, {gun_data, _Pid, _StreamRef, fin, Data},
-             #{data := DataAcc, from := From, status_code
-               := StatusCode, headers := Headers} = StateData) ->
+receive_data(cast,
+             {gun_data, _Pid, _StreamRef, fin, Data},
+             #{data := DataAcc,
+               from := From,
+               status_code := StatusCode,
+               headers := Headers} =
+                 StateData) ->
     NewData = <<DataAcc/binary, Data/binary>>,
-    Result = {ok, #{status_code => StatusCode,
-                    headers => Headers,
-                    body => NewData
-                   }},
+    Result =
+        {ok,
+         #{status_code => StatusCode,
+           headers => Headers,
+           body => NewData}},
     {next_state, at_rest, StateData, [{reply, From, Result}]};
-receive_data(cast, {gun_error, _Pid, StreamRef, _Reason},
+receive_data(cast,
+             {gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = StateData) ->
     {next_state, at_rest, StateData};
 receive_data(info, Event, StateData) ->
@@ -563,12 +547,13 @@ receive_data(info, Event, StateData) ->
 %% @private
 %% @doc Chunked data response
 -spec receive_chunk({call, gen_statem:from()} | cast | info, term(), statedata()) ->
-    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
-    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
-    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
-    stop |
-    {next_state, atom(), statedata(), [{timeout, 0, 0}]} |
-    {next_state, atom(), statedata()}.
+                       {keep_state_and_data,
+                        [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+                       {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+                       {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+                       stop |
+                       {next_state, atom(), statedata(), [{timeout, 0, 0}]} |
+                       {next_state, atom(), statedata()}.
 receive_chunk({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_chunk, Event, From, StateData);
 receive_chunk(cast, {'DOWN', _, _, _, _Reason}, _StateData) ->
@@ -601,21 +586,19 @@ clean_state_data() ->
 -spec clean_state_data(map()) -> statedata().
 clean_state_data(StateData) ->
     Responses = maps:get(responses, StateData, queue:new()),
-    Requests  = maps:get(pending_requests, StateData, queue:new()),
-    #{
-       pid              => undefined,
-       stream           => undefined,
-       handle_event     => undefined,
-       from             => undefined,
-       responses        => Responses,
-       data             => <<"">>,
-       status_code      => undefined,
-       headers          => undefined,
-       async            => false,
-       async_mode       => binary,
-       buffer           => <<"">>,
-       pending_requests => Requests
-     }.
+    Requests = maps:get(pending_requests, StateData, queue:new()),
+    #{pid => undefined,
+      stream => undefined,
+      handle_event => undefined,
+      from => undefined,
+      responses => Responses,
+      data => <<"">>,
+      status_code => undefined,
+      headers => undefined,
+      async => false,
+      async_mode => binary,
+      buffer => <<"">>,
+      pending_requests => Requests}.
 
 %% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
@@ -630,34 +613,39 @@ http_verb_bin(Method) ->
     list_to_binary(MethodStr).
 
 %% @private
--spec manage_chunk(fin | nofin, reference(), binary(), statedata()) ->
-  statedata().
-manage_chunk(IsFin, StreamRef, Data,
-             StateData = #{handle_event := undefined,
-                           responses := Responses,
-                           async_mode := binary}) ->
+-spec manage_chunk(fin | nofin, reference(), binary(), statedata()) -> statedata().
+manage_chunk(IsFin,
+             StreamRef,
+             Data,
+             StateData =
+                 #{handle_event := undefined,
+                   responses := Responses,
+                   async_mode := binary}) ->
     NewResponses = queue:in({IsFin, StreamRef, Data}, Responses),
     StateData#{responses => NewResponses};
-manage_chunk(IsFin, StreamRef, Data,
-             StateData = #{handle_event := undefined,
-                           responses := Responses,
-                           async_mode := sse}) ->
+manage_chunk(IsFin,
+             StreamRef,
+             Data,
+             StateData =
+                 #{handle_event := undefined,
+                   responses := Responses,
+                   async_mode := sse}) ->
     {Events, NewStateData} = sse_events(IsFin, Data, StateData),
-    FunAdd = fun(Event, Acc) ->
-                     queue:in({IsFin, StreamRef, Event}, Acc)
-             end,
+    FunAdd = fun(Event, Acc) -> queue:in({IsFin, StreamRef, Event}, Acc) end,
     NewResponses = lists:foldl(FunAdd, Responses, Events),
     NewStateData#{responses => NewResponses};
-manage_chunk(IsFin, StreamRef, Data,
-             StateData = #{handle_event := HandleEvent,
-                           async_mode := binary}) ->
+manage_chunk(IsFin,
+             StreamRef,
+             Data,
+             StateData = #{handle_event := HandleEvent, async_mode := binary}) ->
     HandleEvent(IsFin, StreamRef, Data),
     StateData;
-manage_chunk(IsFin, StreamRef, Data,
-             StateData = #{handle_event := HandleEvent,
-                           async_mode := sse}) ->
+manage_chunk(IsFin,
+             StreamRef,
+             Data,
+             StateData = #{handle_event := HandleEvent, async_mode := sse}) ->
     {Events, NewStateData} = sse_events(IsFin, Data, StateData),
-    Fun = fun (Event) -> HandleEvent(IsFin, StreamRef, Event) end,
+    Fun = fun(Event) -> HandleEvent(IsFin, StreamRef, Event) end,
     lists:foreach(Fun, Events),
     NewStateData.
 
@@ -670,16 +658,18 @@ process_options(Options, Headers0, HttpVerb) ->
     AsyncMode = maps:get(async_mode, Options, binary),
     Timeout = maps:get(timeout, Options, 5000),
     case {Async, HttpVerb} of
-        {true, get} -> ok;
-        {true, Other} -> throw({async_unsupported, Other});
-        _ -> ok
+        {true, get} ->
+            ok;
+        {true, Other} ->
+            throw({async_unsupported, Other});
+        _ ->
+            ok
     end,
     #{handle_event => HandleEvent,
       async => Async,
       async_mode => AsyncMode,
       headers => Headers,
-      timeout => Timeout
-     }.
+      timeout => Timeout}.
 
 %% @private
 -spec basic_auth_header(headers()) -> proplists:proplist().
@@ -704,8 +694,7 @@ encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
 
 %% @private
--spec sse_events(fin | nofin, binary(), statedata()) ->
-    {list(binary()), statedata()}.
+-spec sse_events(fin | nofin, binary(), statedata()) -> {[binary()], statedata()}.
 sse_events(IsFin, Data, StateData = #{buffer := Buffer}) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
     DataList = binary:split(NewBuffer, <<"\n\n">>, [global]),
@@ -721,20 +710,27 @@ sse_events(IsFin, Data, StateData = #{buffer := Buffer}) ->
     end.
 
 %% @private
--spec check_uri(iolist()) -> ok .
-check_uri([$/ | _]) -> ok;
+-spec check_uri(iolist()) -> ok.
+check_uri([$/ | _]) ->
+    ok;
 check_uri(U) ->
-  case iolist_to_binary(U) of
-    <<"/", _/binary>> -> ok;
-    _ -> throw (missing_slash_uri)
-  end.
+    case iolist_to_binary(U) of
+        <<"/", _/binary>> ->
+            ok;
+        _ ->
+            throw(missing_slash_uri)
+    end.
 
 %% @private
 -spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata()) ->
-    {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
-    {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
-    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]}.
-enqueue_work_or_stop(_StateName, get_events, From, #{responses := Responses} = StateData) ->
+                              {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
+                              {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
+                              {keep_state_and_data,
+                               [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]}.
+enqueue_work_or_stop(_StateName,
+                     get_events,
+                     From,
+                     #{responses := Responses} = StateData) ->
     Reply = queue:to_list(Responses),
     {keep_state, StateData#{responses := queue:new()}, [{reply, From, Reply}]};
 enqueue_work_or_stop(StateName = at_rest, Event, From, StateData) ->
@@ -744,8 +740,9 @@ enqueue_work_or_stop(StateName, Event, From, StateData) ->
 
 %% @private
 -spec enqueue_work_or_stop(atom(), term(), gen_statem:from(), statedata(), timeout()) ->
-    {keep_state_and_data, [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
-    {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
+                              {keep_state_and_data,
+                               [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
+                              {keep_state, statedata(), [{timeout, timeout(), get_work}]}.
 enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     case create_work(Event, From) of
         {ok, Work} ->
@@ -757,15 +754,17 @@ enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
     end.
 
 %% @private
--spec create_work({atom(), list()}, gen_statem:from()) ->
-    not_work | {ok, work()}.
+-spec create_work({atom(), list()}, gen_statem:from()) -> not_work | {ok, work()}.
 create_work({M = get_async, {HandleEvent, AsyncMode}, Args}, From) ->
     {ok, {M, {HandleEvent, AsyncMode}, Args, From}};
 create_work({M, Args}, From)
-  when M == get orelse M == post
-       orelse M == delete orelse M == head
-       orelse M == options orelse M == patch
-       orelse M == put ->
+    when M == get
+         orelse M == post
+         orelse M == delete
+         orelse M == head
+         orelse M == options
+         orelse M == patch
+         orelse M == put ->
     {ok, {M, Args, From}};
 create_work(_, _) ->
     not_work.
