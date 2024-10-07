@@ -1,21 +1,14 @@
-{application, shotgun,
- [
-  {description,
-   "better than just a gun"},
+{application,
+ shotgun,
+ [{description, "better than just a gun"},
   {vsn, "1.0.1"},
-  {applications,
-    [kernel,
-     stdlib,
-     gun
-    ]},
+  {applications, [kernel, stdlib, gun]},
   {mod, {shotgun_app, []}},
   {modules, []},
   {registered, []},
   {licenses, ["Apache 2.0"]},
-  {links, [ {"Github", "https://github.com/inaka/shotgun"}
-          , {"Docs", "http://inaka.github.io/shotgun/"}
-          , {"SSE Spec", "https://html.spec.whatwg.org/multipage/comms.html#server-sent-events"}
-          ]},
-  {build_tools, ["rebar3"]}
- ]
-}.
+  {links,
+   [{"Github", "https://github.com/inaka/shotgun"},
+    {"Docs", "http://inaka.github.io/shotgun/"},
+    {"SSE Spec", "https://html.spec.whatwg.org/multipage/comms.html#server-sent-events"}]},
+  {build_tools, ["rebar3"]}]}.
