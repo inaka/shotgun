@@ -1,11 +1,9 @@
 %% @hidden
 -module(shotgun_app).
+
 -behavior(application).
 
--export([
-         start/2,
-         stop/1
-        ]).
+-export([start/2, stop/1]).
 
 -spec start(term(), term()) -> {ok, pid()}.
 start(_StartType, _StartArgs) ->
