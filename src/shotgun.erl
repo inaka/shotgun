@@ -175,7 +175,7 @@ reopen(Pid, Host, Port, Type) ->
 						 Type :: connection_type(), Opts :: open_opts()) ->
     ok | {error, gun_open_failed | gun_open_timeout}.
 reopen(Pid, Host, Port, Type, Opts) ->
-		gen_statem:call(Pid, {open, Host, Port, Type, Opts}).
+		gen_statem:call(Pid, {reopen, Host, Port, Type, Opts}).
 
 %% @doc Closes the connection with the host.
 -spec close(pid()) -> ok.
@@ -375,9 +375,11 @@ parse_event(EventBin) ->
 callback_mode() -> state_functions.
 
 %% @private
--spec init([{Host :: string(), Port :: integer(), Type :: connection_type(), Opts ::open_opts()}]) ->
-    {ok, at_rest, statedata()} | {stop, gun_open_timeout} | {stop, gun_open_failed}.
-init([Host, Port, Type, Opts]) ->
+-spec init([{Host :: string(), Port :: integer(),
+						 Type :: connection_type(), Opts ::open_opts()}]) ->
+    {ok, at_rest, statedata()} | {stop, gun_open_timeout} |
+					{stop, gun_open_failed}.
+init([{Host, Port, Type, Opts}]) ->
 		case open_connection(Host, Port, Type, Opts) of
 				{ok, StateData} -> {ok, at_rest, StateData};
 				{error, Error} -> {stop, Error}
@@ -403,7 +405,7 @@ open_connection(Host, Port, Type, Opts) ->
     GunOpts = maps:merge(DefaultGunOpts, PassedGunOpts),
     Timeout = maps:get(timeout, Opts, 5000),
     {ok, Pid} = gun:open(Host, Port, GunOpts),
-    _ = monitor(process, Pid),
+		_ = monitor(process, Pid),
     case gun:await_up(Pid, Timeout) of
       {ok, _} ->
         StateData = clean_state_data(),
@@ -428,16 +430,12 @@ open_connection(Host, Port, Type, Opts) ->
     {next_state, atom(), statedata()}.
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
-handle_info(
-    {gun_down, Pid, Protocol, {error, Reason},
-     KilledStreams, UnprocessedStreams}, _StateName,
+handle_info({gun_down, Pid, Protocol, Reason, KilledStreams}, _StateName,
     StateData = #{pid := Pid}) ->
     error_logger:warning_msg(
-        "~p connection down on ~p: ~p (Killed: ~p, Unprocessed: ~p)",
-        [Protocol, Pid, Reason, KilledStreams, UnprocessedStreams]),
-		handle_info({gun_down, Pid, undefined, undefined, undefined}, undefined, StateData);
-handle_info(
-    {gun_down, Pid, _, _, _, _}, _StateName, StateData = #{pid := Pid}) ->
+        "~p connection down on ~p: ~p (Killed: ~p)",
+				 [Protocol, Pid, Reason, KilledStreams]),
+%		demonitor(Pid, [flush]),
 		gun:shutdown(Pid),
 		CleanStateData = clean_state_data(StateData),
     {next_state, down, CleanStateData};
@@ -488,6 +486,7 @@ at_rest(cast, shutdown, _StateData) ->
 % but just in case ...
 at_rest(cast, {gun_down, _Args, _From}, StateData = #{pid := Pid}) ->
     % cleanup gun process
+%		demonitor(Pid, [flush]),
     gun:shutdown(Pid),
 		CleanStateData = clean_state_data(StateData),
     {next_state, down, CleanStateData};
@@ -632,19 +631,24 @@ receive_chunk(info, Event, StateData) ->
 
 %% @private
 -spec down({call, From :: gen_statem:from()},
-					 {open, Host :: string(), Port :: integer(), Type :: connection_type(),
+					 {reopen, Host :: string(), Port :: integer(), Type :: connection_type(),
 						Opts :: open_opts()}, StateData :: statedata()) ->
-    {ok, at_rest, statedata()} | {error, gun_open_timeout | gun_open_failed | gun_down}.
-down({call, _From}, {open, Host, Port, Type, Opts}, StateData) ->
+					{ok, at_rest, statedata()} | {error, gun_open_timeout | gun_open_failed | gun_down};
+					(cast | info, Event :: term(), StateData :: statedata()) ->
+					{error, gun_down} | {keep_state, statedata()}.
+down({call, From}, {reopen, Host, Port, Type, Opts}, StateData) ->
 		case open_connection(Host, Port, Type, Opts) of
-				{ok, StateData} -> {ok, at_rest, StateData};
-				Error -> Error
+				% always send the result to the initial process From
+				{ok, NewStateData} -> {next_state, at_rest, NewStateData,
+														[{reply, From, {ok, self()}}]};
+				Error -> {keep_state, StateData, [{reply, From, Error}]}
 		end;
-down({call, _From}, _Event, _StateData) ->
-		{error, gun_down};
+down({call, From}, _Event, StateData) ->
+		{keep_state, StateData, {reply, From, {error, gun_down}}};
 down(cast, _Event, StateData) ->
-		{keep_state, StateData}.
-
+		{keep_state, StateData};
+down(info, Event, StateData) ->
+		handle_info(Event, down, StateData).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private

@@ -63,30 +63,15 @@ end_per_testcase(_, Config) ->
 
 -spec open(shotgun_test_utils:config()) -> {comment, string()}.
 open(_Config) ->
+	Port = application:get_env(http_server, http_port, 8888),
   {error, gun_open_failed} = shotgun:open("whatever", 8888),
 
   {error, gun_open_timeout} = shotgun:open("google.com", 8888, #{timeout => 1}),
 
-  {ok, Conn} = shotgun:open("localhost", 8888),
+  {ok, Conn} = shotgun:open("localhost", Port),
   ok = shotgun:close(Conn),
 
   {comment, ""}.
-
--spec gun_down(shotgun_test_utils:config()) -> {comment, string()}.
-gun_down(Config) ->
-  Conn = ?config(conn, Config),
-
-  ct:comment("Should get an error."),
-  {error, _} = shotgun:get(Conn, "/down"),
-
-  ct:comment("Reconnecting ..."),
-	ok = shotgun:reopen("localhost", 8888),
-
-  ct:comment("GET should return 200"),
-	{ok, Response} = shotgun:get(Conn, "/"),
-  #{status_code := 200} = Response,
-
-	{comment, ""}.
 
 -spec basic_auth(shotgun_test_utils:config()) -> {comment, string()}.
 basic_auth(Config) ->
@@ -219,3 +204,26 @@ complete_coverage(Config) ->
   {ok, at_rest, #{}} = shotgun:code_change(old_vsn, at_rest, #{}, extra),
 
   {comment, ""}.
+
+-spec gun_down(shotgun_test_utils:config()) -> {comment, string()}.
+gun_down(Config) ->
+  Conn = ?config(conn, Config),
+
+	ok = http_server:stop_listener(),
+
+  % wait until gun_down detected
+  timer:sleep(1000),
+
+  ct:comment("Should get an error."),
+  {error, gun_down} = shotgun:get(Conn, "/"),
+
+	ok = http_server:start_listener(),
+
+  ct:comment("Reconnecting ..."),
+	Port = application:get_env(http_server, http_port, 8888),
+	{ok, _Pid} = shotgun:reopen(Conn, "localhost", Port),
+
+	{ok, Response} = shotgun:get(Conn, "/"),
+  #{status_code := 200} = Response,
+
+	{comment, ""}.
