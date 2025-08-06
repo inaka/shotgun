@@ -41,7 +41,8 @@
     #{async => boolean(),
       async_mode => binary | sse,
       handle_event => fun((fin | nofin, reference(), binary()) -> any()),
-      timeout => timeout()}. %% Default 5000 ms
+      timeout => timeout(), %% Default 5000 ms
+      allow_reconnect => boolean()}. %% Default true
 -type response() ::
     #{status_code => integer(),
       headers => proplists:proplist(),
@@ -241,13 +242,15 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
           async := IsAsync,
           async_mode := AsyncMode,
           headers := Headers,
-          timeout := Timeout} =
+          timeout := Timeout,
+          allow_reconnect := AllowReconnect
+        } =
             process_options(Options, Headers0, get),
 
         Event =
             case IsAsync of
                 true ->
-                    {get_async, {HandleEvent, AsyncMode}, {Uri, Headers, Body}};
+                    {get_async, {HandleEvent, AsyncMode, AllowReconnect}, {Uri, Headers, Body}};
                 false ->
                     {get, {Uri, Headers, Body}}
             end,
@@ -320,7 +323,9 @@ parse_event(EventBin) ->
       pid => pid() | undefined,
       responses => queue:queue() | undefined,
       status_code => integer() | undefined,
-      stream => reference() | undefined}.
+      stream => reference() | undefined,
+      allow_reconnect => boolean()
+    }.
 
 %% @private
 -spec callback_mode() -> state_functions.
@@ -391,13 +396,18 @@ open_connection(Host, Port, Type, Opts) ->
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
 handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
-            _StateName,
-            StateData = #{pid := Pid}) ->
-    error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p)",
-                             [Protocol, Pid, Reason, KilledStreams]),
-    gun:shutdown(Pid),
-    CleanStateData = clean_state_data(StateData),
-    {next_state, down, CleanStateData};
+            StateName,
+            StateData = #{pid := Pid, allow_reconnect := AllowReconnect }) ->
+    error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p) (AllowReconnect: ~p)",
+                            [Protocol, Pid, Reason, KilledStreams, AllowReconnect]),
+    case AllowReconnect of
+        true ->
+            gun:shutdown(Pid),
+            CleanStateData = clean_state_data(StateData),
+            {next_state, down, CleanStateData};
+        false ->
+            {next_state, StateName, StateData}
+    end;
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
     % forward messages to state machine
@@ -450,7 +460,7 @@ at_rest(cast, {gun_down, _Args, _From}, StateData = #{pid := Pid}) ->
     CleanStateData = clean_state_data(StateData),
     {next_state, down, CleanStateData};
 at_rest(cast,
-        {get_async, {HandleEvent, AsyncMode}, Args, From},
+        {get_async, {HandleEvent, AsyncMode, AllowReconnect}, Args, From},
         StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
     CleanStateData = clean_state_data(StateData),
@@ -460,7 +470,8 @@ at_rest(cast,
                         stream => StreamRef,
                         handle_event => HandleEvent,
                         async => true,
-                        async_mode => AsyncMode},
+                        async_mode => AsyncMode,
+                        allow_reconnect => AllowReconnect},
     {next_state, wait_response, NewStateData};
 at_rest(cast, {HttpVerb, {_, _, Body} = Args, From}, StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
@@ -641,6 +652,7 @@ clean_state_data() ->
 clean_state_data(StateData) ->
     Responses = maps:get(responses, StateData, queue:new()),
     Requests = maps:get(pending_requests, StateData, queue:new()),
+    AllowReconnect = maps:get(allow_reconnect, StateData, true),
     #{pid => undefined,
       stream => undefined,
       handle_event => undefined,
@@ -652,7 +664,8 @@ clean_state_data(StateData) ->
       async => false,
       async_mode => binary,
       buffer => <<"">>,
-      pending_requests => Requests}.
+      pending_requests => Requests,
+      allow_reconnect => AllowReconnect}.
 
 %% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
@@ -711,6 +724,7 @@ process_options(Options, Headers0, HttpVerb) ->
     Async = maps:get(async, Options, false),
     AsyncMode = maps:get(async_mode, Options, binary),
     Timeout = maps:get(timeout, Options, 5000),
+    AllowReconnect = maps:get(allow_reconnect, Options, true),
     case {Async, HttpVerb} of
         {true, get} ->
             ok;
@@ -723,7 +737,8 @@ process_options(Options, Headers0, HttpVerb) ->
       async => Async,
       async_mode => AsyncMode,
       headers => Headers,
-      timeout => Timeout}.
+      timeout => Timeout,
+      allow_reconnect => AllowReconnect}.
 
 %% @private
 -spec basic_auth_header(headers()) -> proplists:proplist().
@@ -809,8 +824,8 @@ enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
 
 %% @private
 -spec create_work({atom(), list()}, gen_statem:from()) -> not_work | {ok, work()}.
-create_work({M = get_async, {HandleEvent, AsyncMode}, Args}, From) ->
-    {ok, {M, {HandleEvent, AsyncMode}, Args, From}};
+create_work({M = get_async, {HandleEvent, AsyncMode, AllowReconnect}, Args}, From) ->
+    {ok, {M, {HandleEvent, AsyncMode, AllowReconnect}, Args, From}};
 create_work({M, Args}, From)
     when M == get
          orelse M == post
