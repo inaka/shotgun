@@ -396,7 +396,7 @@ open_connection(Host, Port, Type, Opts) ->
 handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData};
 handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
-            StateName,
+            _StateName,
             StateData = #{pid := Pid, allow_reconnect := AllowReconnect }) ->
     error_logger:warning_msg("~p connection down on ~p: ~p (Killed: ~p) (AllowReconnect: ~p)",
                             [Protocol, Pid, Reason, KilledStreams, AllowReconnect]),
@@ -406,7 +406,7 @@ handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
             CleanStateData = clean_state_data(StateData),
             {next_state, down, CleanStateData};
         false ->
-            {next_state, StateName, StateData}
+            keep_state_and_data
     end;
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,
