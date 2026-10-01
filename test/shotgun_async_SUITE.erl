@@ -9,7 +9,10 @@
     get_handle_event/1,
     async_unsupported/1,
     async_gun_down_no_reopen/1,
-    async_gun_down_with_reopen/1
+    async_gun_down_with_reopen/1,
+    read_timeout_stops_silent_stream/1,
+    read_timeout_reset_by_chunks/1,
+    read_timeout_default_keeps_silent_stream/1
 ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -252,5 +255,70 @@ async_gun_down_with_reopen(Config) ->
 
     {ok, _Ref2} = shotgun:get(Conn, <<"/chunked-sse/3">>, #{}, Opts),
     ok = shotgun_test_utils:wait_receive(<<"1">>, 500),
+
+    {comment, ""}.
+
+-spec read_timeout_stops_silent_stream(shotgun_test_utils:config()) -> {comment, string()}.
+read_timeout_stops_silent_stream(Config) ->
+    Conn = ?config(conn, Config),
+    MRef = monitor(process, Conn),
+
+    ct:comment("A stream that sends nothing is closed after read_timeout"),
+    Opts = #{async => true, async_mode => sse, read_timeout => 300},
+    Started = erlang:monotonic_time(millisecond),
+    {ok, Ref} = shotgun:get(Conn, <<"/chunked-sse-silent">>, #{}, Opts),
+    true = is_reference(Ref),
+    Reason =
+        receive
+            {'DOWN', MRef, process, Conn, R} -> R
+        after 2000 ->
+            error(read_timeout_did_not_fire)
+        end,
+    {shutdown, read_timeout} = Reason,
+    Elapsed = erlang:monotonic_time(millisecond) - Started,
+    true = Elapsed >= 300,
+
+    {comment, ""}.
+
+-spec read_timeout_reset_by_chunks(shotgun_test_utils:config()) -> {comment, string()}.
+read_timeout_reset_by_chunks(Config) ->
+    Conn = ?config(conn, Config),
+    MRef = monitor(process, Conn),
+
+    ct:comment("Chunks that arrive within read_timeout keep the stream open"),
+    %% Events arrive every 100 ms. Ten events take about one second, far
+    %% longer than the 300 ms read_timeout, but no gap exceeds it.
+    Opts = #{async => true, async_mode => sse, read_timeout => 300},
+    {ok, Ref} = shotgun:get(Conn, <<"/chunked-sse/10">>, #{}, Opts),
+    %% Long enough for all events plus more than read_timeout of silence
+    %% after the stream has ended.
+    timer:sleep(1600),
+    receive
+        {'DOWN', MRef, process, Conn, R} -> error({unexpected_exit, R})
+    after 0 ->
+        ok
+    end,
+    Events = shotgun:events(Conn),
+    11 = length(Events),
+    {fin, Ref, <<>>} = lists:last(Events),
+
+    ct:comment("The timer is cancelled at the end of the stream"),
+    {ok, #{status_code := 200}} = shotgun:get(Conn, <<"/">>),
+
+    {comment, ""}.
+
+-spec read_timeout_default_keeps_silent_stream(shotgun_test_utils:config()) -> {comment, string()}.
+read_timeout_default_keeps_silent_stream(Config) ->
+    Conn = ?config(conn, Config),
+    MRef = monitor(process, Conn),
+
+    ct:comment("Without read_timeout a silent stream stays open"),
+    Opts = #{async => true, async_mode => sse},
+    {ok, _Ref} = shotgun:get(Conn, <<"/chunked-sse-silent">>, #{}, Opts),
+    receive
+        {'DOWN', MRef, process, Conn, R} -> error({unexpected_exit, R})
+    after 700 ->
+        ok
+    end,
 
     {comment, ""}.
