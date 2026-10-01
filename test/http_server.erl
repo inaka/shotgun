@@ -40,6 +40,7 @@ start_listener() ->
            {"/basic-auth", http_basic_auth_handler, []},
            {"/chunked-sse[/:count]", lasse_handler, [http_sse_handler]},
            {"/chunked-sse-silent", lasse_handler, [http_silent_sse_handler]},
+           {"/chunked-sse-then-silent[/:count]", lasse_handler, [http_then_silent_sse_handler]},
            {"/chunked-binary", http_binary_handler, []}]}],
     Dispatch = cowboy_router:compile(Routes),
     TransportOptions = [{port, Port}],

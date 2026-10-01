@@ -174,12 +174,16 @@ get(Pid, Uri, Headers) ->
 %%   </li>
 %%   <li>
 %%     <code>read_timeout</code>:
-%%     when async is true, the maximum time in milliseconds to wait for the
-%%     next chunk of the response. When no data arrives in that time the
-%%     connection is closed and the shotgun process exits with reason
-%%     <code>{shutdown, read_timeout}</code>. This detects half-open
-%%     connections on long-lived streams. Default value is
-%%     <code>infinity</code>.
+%%     when async is true, the maximum time in milliseconds between two
+%%     chunks of a chunked response. The timer starts when the response
+%%     headers arrive and restarts each time chunk data is delivered. When
+%%     no chunk data is delivered in that time, shotgun closes the
+%%     connection and the process exits with reason
+%%     <code>{shutdown, read_timeout}</code>. Monitor the connection pid to
+%%     be notified. Queued events are lost and <code>handle_event</code>
+%%     gets no final call. The option has no effect on responses without
+%%     chunked transfer encoding. The value must be <code>infinity</code>
+%%     or a positive integer. Default value is <code>infinity</code>.
 %%   </li>
 %% </ul>
 %% @end
@@ -627,9 +631,12 @@ receive_chunk(cast, {gun_data, _Pid, StreamRef, IsFin, Data}, StateData) ->
     end;
 receive_chunk(cast, {gun_error, _Pid, _StreamRef, _Reason}, StateData) ->
     {next_state, at_rest, StateData, [{timeout, 0, 0}, cancel_read_timeout()]};
-receive_chunk({timeout, read}, read_timeout, StateData) ->
-    %% No bytes arrived within read_timeout. The connection is dead even if
-    %% the transport has not noticed. Stop so that the owner can reconnect.
+receive_chunk({timeout, read}, read_timeout, StateData = #{pid := Pid, read_timeout := ReadTimeout}) ->
+    %% No chunk data arrived within read_timeout. The connection is dead
+    %% even if the transport has not noticed. Close gun at once: a graceful
+    %% shutdown would wait closing_timeout for a peer that is gone.
+    error_logger:warning_msg("read timeout on ~p: no chunk data received in ~p ms", [Pid, ReadTimeout]),
+    _ = gun:close(Pid),
     {stop, {shutdown, read_timeout}, StateData};
 receive_chunk(info, Event, StateData) ->
     handle_info(Event, receive_chunk, StateData).
@@ -748,7 +755,7 @@ process_options(Options, Headers0, HttpVerb) ->
     AsyncMode = maps:get(async_mode, Options, binary),
     Timeout = maps:get(timeout, Options, 5000),
     AllowReconnect = maps:get(allow_reconnect, Options, true),
-    ReadTimeout = maps:get(read_timeout, Options, infinity),
+    ReadTimeout = read_timeout_option(maps:get(read_timeout, Options, infinity)),
     case {Async, HttpVerb} of
         {true, get} ->
             ok;
@@ -764,6 +771,17 @@ process_options(Options, Headers0, HttpVerb) ->
       timeout => Timeout,
       allow_reconnect => AllowReconnect,
       read_timeout => ReadTimeout}.
+
+%% @private
+%% read_timeout must be infinity or a positive number of milliseconds.
+%% Zero is rejected: a zero generic timeout fires before any queued chunk.
+-spec read_timeout_option(term()) -> timeout().
+read_timeout_option(infinity) ->
+    infinity;
+read_timeout_option(Ms) when is_integer(Ms), Ms > 0 ->
+    Ms;
+read_timeout_option(Value) ->
+    throw({invalid_read_timeout, Value}).
 
 %% @private
 -spec basic_auth_header(headers()) -> proplists:proplist().
@@ -790,12 +808,12 @@ encode_basic_auth(Username, Password) ->
 %% @private
 %% Generic timeout that fires when no chunk arrives within read_timeout.
 %% Every chunk restarts it. infinity starts no timer.
--spec read_timeout_action(statedata()) -> gen_statem:generic_timeout_action().
+-spec read_timeout_action(statedata()) -> gen_statem:action().
 read_timeout_action(#{read_timeout := ReadTimeout}) ->
     {{timeout, read}, ReadTimeout, read_timeout}.
 
 %% @private
--spec cancel_read_timeout() -> gen_statem:generic_timeout_action().
+-spec cancel_read_timeout() -> gen_statem:action().
 cancel_read_timeout() ->
     {{timeout, read}, infinity, read_timeout}.
 

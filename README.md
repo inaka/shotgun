@@ -133,6 +133,12 @@ an event is parsed (`async_mode` = `sse`). If no handle_event function is
 provided the data received is added to a queue, whose values can be obtained
 calling the `shotgun:events/1`. Default value is `undefined`.
 
+- `read_timeout :: timeout()`: when `async` is `true`, the maximum time in
+milliseconds between two chunks of the response. When no chunk data is
+delivered in that time the connection is closed and the connection process
+exits with reason `{shutdown, read_timeout}`. Monitor the connection pid to be
+notified, then open a new connection. Default value is `infinity`.
+
 The following is an example of the usage of **shotgun** when consuming SSE.
 
 ```erlang
