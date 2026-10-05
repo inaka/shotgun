@@ -42,7 +42,8 @@
       async_mode => binary | sse,
       handle_event => fun((fin | nofin, reference(), binary()) -> any()),
       timeout => timeout(), %% Default 5000 ms
-      allow_reconnect => boolean()}. %% Default true
+      allow_reconnect => boolean(), %% Default true
+      read_timeout => timeout()}. %% Default infinity
 -type response() ::
     #{status_code => integer(),
       headers => proplists:proplist(),
@@ -171,6 +172,19 @@ get(Pid, Uri, Headers) ->
 %%     the data received is added to a queue, whose values can be obtained
 %%     calling the <code>shotgun:events/1</code>. Default value is undefined.
 %%   </li>
+%%   <li>
+%%     <code>read_timeout</code>:
+%%     when async is true, the maximum time in milliseconds between two
+%%     chunks of a chunked response. The timer starts when the response
+%%     headers arrive and restarts each time chunk data is delivered. When
+%%     no chunk data is delivered in that time, shotgun closes the
+%%     connection and the process exits with reason
+%%     <code>{shutdown, read_timeout}</code>. Monitor the connection pid to
+%%     be notified. Queued events are lost and <code>handle_event</code>
+%%     gets no final call. The option has no effect on responses without
+%%     chunked transfer encoding. The value must be <code>infinity</code>
+%%     or a positive integer. Default value is <code>infinity</code>.
+%%   </li>
 %% </ul>
 %% @end
 -spec get(connection(), uri(), headers(), options()) -> result().
@@ -243,14 +257,17 @@ request(Pid, get, Uri, Headers0, Body, Options) ->
           async_mode := AsyncMode,
           headers := Headers,
           timeout := Timeout,
-          allow_reconnect := AllowReconnect
+          allow_reconnect := AllowReconnect,
+          read_timeout := ReadTimeout
         } =
             process_options(Options, Headers0, get),
 
         Event =
             case IsAsync of
                 true ->
-                    {get_async, {HandleEvent, AsyncMode, AllowReconnect}, {Uri, Headers, Body}};
+                    {get_async,
+                     {HandleEvent, AsyncMode, AllowReconnect, ReadTimeout},
+                     {Uri, Headers, Body}};
                 false ->
                     {get, {Uri, Headers, Body}}
             end,
@@ -324,7 +341,8 @@ parse_event(EventBin) ->
       responses => queue:queue() | undefined,
       status_code => integer() | undefined,
       stream => reference() | undefined,
-      allow_reconnect => boolean()
+      allow_reconnect => boolean(),
+      read_timeout => timeout()
     }.
 
 %% @private
@@ -460,7 +478,7 @@ at_rest(cast, {gun_down, _Args, _From}, StateData = #{pid := Pid}) ->
     CleanStateData = clean_state_data(StateData),
     {next_state, down, CleanStateData};
 at_rest(cast,
-        {get_async, {HandleEvent, AsyncMode, AllowReconnect}, Args, From},
+        {get_async, {HandleEvent, AsyncMode, AllowReconnect, ReadTimeout}, Args, From},
         StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(get, Pid, Args),
     CleanStateData = clean_state_data(StateData),
@@ -471,7 +489,8 @@ at_rest(cast,
                         handle_event => HandleEvent,
                         async => true,
                         async_mode => AsyncMode,
-                        allow_reconnect => AllowReconnect},
+                        allow_reconnect => AllowReconnect,
+                        read_timeout => ReadTimeout},
     {next_state, wait_response, NewStateData};
 at_rest(cast, {HttpVerb, {_, _, Body} = Args, From}, StateData = #{pid := Pid}) ->
     StreamRef = do_http_verb(HttpVerb, Pid, Args),
@@ -525,7 +544,7 @@ wait_response(cast,
         case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
             {<<"transfer-encoding">>, <<"chunked">>} when Async ->
                 Result = {ok, StreamRef},
-                {receive_chunk, [{reply, From, Result}]};
+                {receive_chunk, [{reply, From, Result}, read_timeout_action(StateData)]};
             _ ->
                 {receive_data, []}
         end,
@@ -585,13 +604,16 @@ receive_data(info, Event, StateData) ->
 
 %% @private
 %% @doc Chunked data response
--spec receive_chunk({call, gen_statem:from()} | cast | info, term(), statedata()) ->
+-spec receive_chunk({call, gen_statem:from()} | cast | info | {timeout, read},
+                    term(),
+                    statedata()) ->
                        {keep_state_and_data,
                         [{reply, gen_statem:from(), {error, {unexpected, atom()}}}]} |
                        {keep_state, statedata(), [{reply, gen_statem:from(), list()}]} |
                        {keep_state, statedata(), [{timeout, timeout(), get_work}]} |
                        stop |
-                       {next_state, atom(), statedata(), [{timeout, 0, 0}]} |
+                       {next_state, atom(), statedata(), [gen_statem:action()]} |
+                       {stop, {shutdown, read_timeout}, statedata()} |
                        {next_state, atom(), statedata()}.
 receive_chunk({call, From}, Event, StateData) ->
     enqueue_work_or_stop(receive_chunk, Event, From, StateData);
@@ -603,12 +625,19 @@ receive_chunk(cast, {gun_data, _Pid, StreamRef, IsFin, Data}, StateData) ->
     NewStateData = manage_chunk(IsFin, StreamRef, Data, StateData),
     case IsFin of
         fin ->
-            {next_state, at_rest, NewStateData, [{timeout, 0, 0}]};
+            {next_state, at_rest, NewStateData, [{timeout, 0, 0}, cancel_read_timeout()]};
         nofin ->
-            {next_state, receive_chunk, NewStateData}
+            {next_state, receive_chunk, NewStateData, [read_timeout_action(NewStateData)]}
     end;
 receive_chunk(cast, {gun_error, _Pid, _StreamRef, _Reason}, StateData) ->
-    {next_state, at_rest, StateData, [{timeout, 0, 0}]};
+    {next_state, at_rest, StateData, [{timeout, 0, 0}, cancel_read_timeout()]};
+receive_chunk({timeout, read}, read_timeout, StateData = #{pid := Pid, read_timeout := ReadTimeout}) ->
+    %% No chunk data arrived within read_timeout. The connection is dead
+    %% even if the transport has not noticed. Close gun at once: a graceful
+    %% shutdown would wait closing_timeout for a peer that is gone.
+    error_logger:warning_msg("read timeout on ~p: no chunk data received in ~p ms", [Pid, ReadTimeout]),
+    _ = gun:close(Pid),
+    {stop, {shutdown, read_timeout}, StateData};
 receive_chunk(info, Event, StateData) ->
     handle_info(Event, receive_chunk, StateData).
 
@@ -665,7 +694,8 @@ clean_state_data(StateData) ->
       async_mode => binary,
       buffer => <<"">>,
       pending_requests => Requests,
-      allow_reconnect => AllowReconnect}.
+      allow_reconnect => AllowReconnect,
+      read_timeout => infinity}.
 
 %% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
@@ -725,6 +755,7 @@ process_options(Options, Headers0, HttpVerb) ->
     AsyncMode = maps:get(async_mode, Options, binary),
     Timeout = maps:get(timeout, Options, 5000),
     AllowReconnect = maps:get(allow_reconnect, Options, true),
+    ReadTimeout = read_timeout_option(maps:get(read_timeout, Options, infinity)),
     case {Async, HttpVerb} of
         {true, get} ->
             ok;
@@ -738,7 +769,19 @@ process_options(Options, Headers0, HttpVerb) ->
       async_mode => AsyncMode,
       headers => Headers,
       timeout => Timeout,
-      allow_reconnect => AllowReconnect}.
+      allow_reconnect => AllowReconnect,
+      read_timeout => ReadTimeout}.
+
+%% @private
+%% read_timeout must be infinity or a positive number of milliseconds.
+%% Zero is rejected: a zero generic timeout fires before any queued chunk.
+-spec read_timeout_option(term()) -> timeout().
+read_timeout_option(infinity) ->
+    infinity;
+read_timeout_option(Ms) when is_integer(Ms), Ms > 0 ->
+    Ms;
+read_timeout_option(Value) ->
+    throw({invalid_read_timeout, Value}).
 
 %% @private
 -spec basic_auth_header(headers()) -> proplists:proplist().
@@ -761,6 +804,18 @@ basic_auth_header(Headers) ->
 -spec encode_basic_auth(ascii_string(), ascii_string()) -> binary().
 encode_basic_auth(Username, Password) ->
     base64:encode(Username ++ [$: | Password]).
+
+%% @private
+%% Generic timeout that fires when no chunk arrives within read_timeout.
+%% Every chunk restarts it. infinity starts no timer.
+-spec read_timeout_action(statedata()) -> gen_statem:action().
+read_timeout_action(#{read_timeout := ReadTimeout}) ->
+    {{timeout, read}, ReadTimeout, read_timeout}.
+
+%% @private
+-spec cancel_read_timeout() -> gen_statem:action().
+cancel_read_timeout() ->
+    {{timeout, read}, infinity, read_timeout}.
 
 %% @private
 -spec sse_events(fin | nofin, binary(), statedata()) -> {[binary()], statedata()}.
@@ -824,8 +879,8 @@ enqueue_work_or_stop(_StateName, Event, From, StateData, Timeout) ->
 
 %% @private
 -spec create_work({atom(), list()}, gen_statem:from()) -> not_work | {ok, work()}.
-create_work({M = get_async, {HandleEvent, AsyncMode, AllowReconnect}, Args}, From) ->
-    {ok, {M, {HandleEvent, AsyncMode, AllowReconnect}, Args, From}};
+create_work({M = get_async, {HandleEvent, AsyncMode, AllowReconnect, ReadTimeout}, Args}, From) ->
+    {ok, {M, {HandleEvent, AsyncMode, AllowReconnect, ReadTimeout}, Args, From}};
 create_work({M, Args}, From)
     when M == get
          orelse M == post
