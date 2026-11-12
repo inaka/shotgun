@@ -10,7 +10,10 @@
          error_status/1, stream_reset/1, content_length_sse/1, content_length_queue/1,
          content_length_sse_queue/1, upload_post/1, upload_put/1, upload_patch/1,
          close_before_headers/1, close_during_body/1, calls_before_headers/1, calls_during_body/1,
-         sse_buffer_remainder/1, reopen_failure/1]).
+         sse_buffer_remainder/1, reopen_failure/1, disconnect_sse_callback/1,
+         disconnect_sse_queue/1, disconnect_binary_callback/1, disconnect_binary_queue/1,
+         disconnect_before_headers/1, disconnect_after_completion/1, disconnect_default_reopen/1,
+         disconnect_explicit_reopen/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
@@ -28,12 +31,19 @@ groups() ->
          trailers_timeout_cancelled, heartbeat_resets_timeout, timeout_before_headers,
          timeout_after_data, error_status, upload_post, upload_patch, upload_put,
          close_before_headers, close_during_body, calls_before_headers, calls_during_body,
-         sse_buffer_remainder, reopen_failure],
+         sse_buffer_remainder, reopen_failure, disconnect_sse_callback, disconnect_sse_queue,
+         disconnect_binary_callback, disconnect_binary_queue, disconnect_before_headers,
+         disconnect_after_completion, disconnect_default_reopen, disconnect_explicit_reopen],
     [{http, [], Tests},
      {http2, [], Tests ++ [stream_reset]},
      {https_http2,
       [],
-      [binary_callback, sse_callback, synchronous, content_length, trailers]}].
+      [binary_callback,
+       sse_callback,
+       synchronous,
+       content_length,
+       trailers,
+       disconnect_sse_callback]}].
 
 -spec init_per_suite(shotgun_test_utils:config()) -> term().
 init_per_suite(Config) ->
@@ -567,6 +577,138 @@ await_state(Conn, Expected, Deadline) ->
                 false ->
                     ct:fail({state_timeout, Expected, Other})
             end
+    end.
+
+-spec disconnect_sse_callback(shotgun_test_utils:config()) -> term().
+disconnect_sse_callback(Config) ->
+    disconnect_stream(Config, callback(sse)).
+
+-spec disconnect_sse_queue(shotgun_test_utils:config()) -> term().
+disconnect_sse_queue(Config) ->
+    disconnect_stream(Config, #{async => true, async_mode => sse}).
+
+-spec disconnect_binary_callback(shotgun_test_utils:config()) -> term().
+disconnect_binary_callback(Config) ->
+    disconnect_stream(Config, callback(binary)).
+
+-spec disconnect_binary_queue(shotgun_test_utils:config()) -> term().
+disconnect_binary_queue(Config) ->
+    disconnect_stream(Config, #{async => true, async_mode => binary}).
+
+disconnect_stream(Config, Opts) ->
+    Conn = ?config(conn, Config),
+    Monitor = monitor(process, Conn),
+    %% A long read timeout must not postpone notification of a known failure.
+    {Handler, Ref} =
+        start_stream(Config, Opts#{allow_reconnect => false, read_timeout => 10000}, #{}),
+    Handler ! {data, nofin, <<"data: alive\n\n">>},
+    case maps:is_key(handle_event, Opts) of
+        true ->
+            receive
+                {event, nofin, Ref, _} ->
+                    ok
+            after 2000 ->
+                ct:fail(no_stream_activity)
+            end;
+        false ->
+            await_buffered_event(Conn)
+    end,
+    drop_transport(),
+    await_disconnect(Monitor, Conn),
+    receive
+        {event, fin, Ref, _} ->
+            ct:fail(disconnect_reported_as_success)
+    after 0 ->
+        ok
+    end.
+
+await_buffered_event(Conn) ->
+    await_buffered_event(Conn, erlang:monotonic_time(millisecond) + 2000).
+
+await_buffered_event(Conn, Deadline) ->
+    case shotgun:events(Conn) of
+        [_ | _] ->
+            ok;
+        [] ->
+            case erlang:monotonic_time(millisecond) < Deadline of
+                true ->
+                    timer:sleep(10),
+                    await_buffered_event(Conn, Deadline);
+                false ->
+                    ct:fail(no_buffered_stream_activity)
+            end
+    end.
+
+-spec disconnect_before_headers(shotgun_test_utils:config()) -> term().
+disconnect_before_headers(Config) ->
+    Conn = ?config(conn, Config),
+    Monitor = monitor(process, Conn),
+    request(Conn,
+            #{async => true,
+              async_mode => sse,
+              allow_reconnect => false}),
+    _Handler = ready(Config),
+    drop_transport(),
+    await_disconnect(Monitor, Conn),
+    {error, _} = result().
+
+-spec disconnect_after_completion(shotgun_test_utils:config()) -> term().
+disconnect_after_completion(Config) ->
+    Conn = ?config(conn, Config),
+    Monitor = monitor(process, Conn),
+    {Handler, Ref} = start_stream(Config, (callback(sse))#{allow_reconnect => false}, #{}),
+    Handler ! {data, fin, <<>>},
+    collect(Ref, <<>>),
+    await_state(Conn, at_rest),
+    drop_transport(),
+    await_disconnect(Monitor, Conn).
+
+-spec disconnect_default_reopen(shotgun_test_utils:config()) -> term().
+disconnect_default_reopen(Config) ->
+    disconnect_reopen(Config, callback(sse)).
+
+-spec disconnect_explicit_reopen(shotgun_test_utils:config()) -> term().
+disconnect_explicit_reopen(Config) ->
+    disconnect_reopen(Config, (callback(sse))#{allow_reconnect => true, read_timeout => 150}).
+
+disconnect_reopen(Config, Opts) ->
+    Conn = ?config(conn, Config),
+    Monitor = monitor(process, Conn),
+    start_stream(Config, Opts, #{}),
+    drop_transport(),
+    await_state(Conn, down),
+    %% Outlive the optional read timeout: a disconnected reusable PID must stay alive.
+    receive
+        {'DOWN', Monitor, process, Conn, Reason} ->
+            ct:fail({unexpected_exit, Reason})
+    after 250 ->
+        ok
+    end,
+    {error, gun_down} = shotgun:get(Conn, "/"),
+    Port = ranch:get_port(shotgun_stream_test),
+    Protocol = ?config(protocol, Config),
+    {ok, Conn} =
+        shotgun:reopen(Conn, "localhost", Port, http, #{gun_opts => #{protocols => [Protocol]}}),
+    {Handler, Ref} = start_stream(Config, callback(sse), #{}),
+    Handler ! {data, fin, <<"data: reopened\n\n">>},
+    {<<"data: reopened">>, fin} = collect(Ref, <<>>),
+    true = demonitor(Monitor, [flush]),
+    reusable(Config).
+
+%% Keep the listener running so Gun can reconnect successfully. Killing the
+%% listener would let the old implementation exit only after exhausting retries.
+drop_transport() ->
+    [Transport] = ranch:procs(shotgun_stream_test, connections),
+    exit(Transport, kill).
+
+await_disconnect(Monitor, Conn) ->
+    receive
+        {'DOWN', Monitor, process, Conn, {shutdown, {gun_down, _Reason}}} ->
+            ok;
+        {'DOWN', Monitor, process, Conn, Reason} ->
+            ct:fail({wrong_disconnect_reason, Reason})
+    after 2000 ->
+        ct:fail(no_disconnect_notification)
     end.
 
 callback(Mode) ->
