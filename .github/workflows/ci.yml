@@ -1,0 +1,37 @@
+---
+name: Erlang CI
+
+"on": [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        otp: ['27', '28', '29']
+        rebar: ['3.27']
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: erlef/setup-beam@v1
+        id: setup-beam
+        with:
+          otp-version: ${{ matrix.otp }}
+          rebar3-version: ${{ matrix.rebar }}
+      - name: Restore _build
+        uses: actions/cache@v6
+        with:
+          path: _build
+          key: _build-cache-for-os-${{ runner.os }}-otp-${{ steps.setup-beam.outputs.otp-version }}-rebar3-${{ steps.setup-beam.outputs.rebar3-version }}-hash-${{ hashFiles('rebar.config', 'rebar.config.script', 'rebar.lock') }}
+      - name: Restore rebar3's cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/rebar3
+          key: rebar3-cache-for-os-${{ runner.os }}-otp-${{ steps.setup-beam.outputs.otp-version }}-rebar3-${{ steps.setup-beam.outputs.rebar3-version }}-hash-${{ hashFiles('rebar.config', 'rebar.config.script', 'rebar.lock') }}
+      - name: Compile
+        run: rebar3 compile
+      - name: Run tests
+        run: rebar3 ct
+      - name: Check coverage
+        run: rebar3 cover --verbose --min_coverage 100
