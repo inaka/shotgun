@@ -173,6 +173,16 @@ get(Pid, Uri, Headers) ->
 %%     calling the <code>shotgun:events/1</code>. Default value is undefined.
 %%   </li>
 %%   <li>
+%%     <code>allow_reconnect</code>:
+%%     for async GET requests, controls whether the connection process can be
+%%     reused after a transport failure. Default is <code>true</code>: the
+%%     process enters <code>down</code> and can be reopened with
+%%     <code>shotgun:reopen</code>. This does not restart an SSE request.
+%%     With <code>false</code>, a <code>gun_down</code> notification terminates
+%%     the process with <code>{shutdown, {gun_down, Reason}}</code>, allowing
+%%     callers monitoring the connection pid to handle disconnection at once.
+%%   </li>
+%%   <li>
 %%     <code>read_timeout</code>:
 %%     when async is true, the maximum time in milliseconds between two
 %%     data messages of a streaming response. The timer starts when the response
@@ -406,7 +416,10 @@ open_connection(Host, Port, Type, Opts) ->
     end.
 
 %% @private
--spec handle_info(term(), atom(), term()) -> {next_state, atom(), statedata()}.
+-spec handle_info(term(), atom(), term()) ->
+    {next_state, atom(), statedata()} |
+    {next_state, atom(), statedata(), [gen_statem:action()]} |
+    {stop, term(), statedata()}.
 handle_info({gun_up, Pid, Protocol}, StateName, StateData = #{pid := Pid}) ->
     {next_state, StateName, StateData#{protocol => Protocol}};
 handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
@@ -418,9 +431,9 @@ handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
         true ->
             gun:shutdown(Pid),
             CleanStateData = clean_state_data(StateData),
-            {next_state, down, CleanStateData};
+            {next_state, down, CleanStateData, [cancel_read_timeout()]};
         false ->
-            keep_state_and_data
+            {stop, {shutdown, {gun_down, Reason}}, StateData}
     end;
 handle_info(Event, StateName, StateData) ->
     Module = ?MODULE,

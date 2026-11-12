@@ -143,6 +143,19 @@ an event is parsed (`async_mode` = `sse`). If no handle_event function is
 provided the data received is added to a queue, whose values can be obtained
 calling the `shotgun:events/1`. Default value is `undefined`.
 
+- `allow_reconnect :: boolean()`: for async GET requests, controls what happens
+when Gun reports that the underlying connection is down. Default value is `true`:
+Shotgun keeps its PID alive in the `down` state, and requests made in that state
+return `{error, gun_down}`. Call `shotgun:reopen` to reuse the PID, then issue a new
+request. Reopening does not automatically resume the previous SSE stream.
+With `false`, Shotgun terminates on `gun_down` with reason
+`{shutdown, {gun_down, Reason}}`, where `Reason` is supplied by Gun. A process
+monitoring the connection receives `DOWN` without waiting for Gun to exhaust its
+retries or for a read timeout. The setting is retained after an async response
+finishes until another async request supplies its own setting or the connection
+is reopened. Unexpected transport failure is not reported as a successful `fin`
+event through the data callback.
+
 - `read_timeout :: timeout()`: when `async` is `true`, the maximum time in
 milliseconds between two chunks of the response. When no chunk data is
 delivered in that time the connection is closed and the connection process
@@ -172,6 +185,26 @@ because events are stored in a queue and each call to `events` returns all
 events queued so far and then removes these from the queue. So it's important
 to understand that `shotgun:events/1` is a function with side-effects when using
 it.
+
+To manage SSE reconnection in your application, monitor the connection and set
+`allow_reconnect => false`:
+
+```erlang
+{ok, Conn} = shotgun:open("localhost", 8080),
+Monitor = erlang:monitor(process, Conn),
+Options = #{async => true, async_mode => sse, allow_reconnect => false},
+{ok, _StreamRef} = shotgun:get(Conn, "/events", #{}, Options),
+receive
+    {'DOWN', Monitor, process, Conn, Reason} ->
+        io:format("SSE connection stopped: ~p~n", [Reason])
+        %% Open a new connection and issue a new SSE request when ready.
+end.
+```
+
+A transport disconnection produces `{shutdown, {gun_down, GunReason}}`; a configured
+read timeout produces `{shutdown, read_timeout}`. The default
+`allow_reconnect => true` keeps the PID available for explicit reopening after
+`gun_down`, so a PID monitor alone does not signal that state transition.
 
 Additionally **shotgun** provides a `parse_event/1` helper function that
 turns a server-sent event binary into a map:
@@ -207,6 +240,36 @@ The coverage report is written to `_build/test/cover/index.html`. Tests cover
 HTTP/1, cleartext HTTP/2, and HTTPS with HTTP/2 negotiated through ALPN. Test TLS
 credentials are generated in memory; no external server is required for these
 protocol tests.
+
+### Test shutdown timeout
+
+The state callback tests wait up to **1000 milliseconds** for a test transport to
+acknowledge shutdown. On slower CI runners, override this limit with the Common
+Test configuration key `transport_shutdown_timeout`.
+
+Create `test/ct.config` with the following **complete file contents**:
+
+```erlang
+%% Common Test configuration for Shotgun.
+%% Maximum wait for a test transport to acknowledge shutdown, in milliseconds.
+%% Default when omitted: 1000 ms. This example allows 5000 ms.
+{transport_shutdown_timeout, 5000}.
+```
+
+This is a complete Common Test configuration file: no other keys are required.
+Write each entry as an Erlang `{Key, Value}` term followed by a period; do not
+wrap the entries in a list or add an application name. This file is separate
+from `rebar.config` and OTP application environment configuration.
+
+Run the full suite from the repository root:
+
+```sh
+rebar3 ct --config test/ct.config
+```
+
+The value is a timeout in milliseconds. If the key is omitted, the tests use
+1000 ms. This setting controls only the shutdown acknowledgement waits in
+`shotgun_state_SUITE`; it does not change Shotgun connection or read timeouts.
 
 ## Contact Us
 If you find any **bugs** or have a **problem** while using this library, please

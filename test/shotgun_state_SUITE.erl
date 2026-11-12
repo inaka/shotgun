@@ -2,7 +2,7 @@
 
 -export([all/0, protocol_update/1, legacy_down/1, transport_monitor_failure/1,
          unexpected_response_event/1, request_failure/1, partial_body_failure/1,
-         invalid_chunked_uri/1]).
+         invalid_chunked_uri/1, disconnect_transition/1]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
@@ -15,7 +15,8 @@ all() ->
      unexpected_response_event,
      request_failure,
      partial_body_failure,
-     invalid_chunked_uri].
+     invalid_chunked_uri,
+     disconnect_transition].
 
 %% These exported state callbacks also need to tolerate transport events that
 %% are difficult to deliver deterministically through a real network connection.
@@ -27,6 +28,7 @@ protocol_update(_) ->
 
 -spec legacy_down(shotgun_test_utils:config()) -> term().
 legacy_down(_) ->
+    Timeout = ct:get_config(transport_shutdown_timeout, 1000),
     Owner = self(),
     Transport =
         spawn_link(fun() ->
@@ -53,13 +55,14 @@ legacy_down(_) ->
     receive
         transport_shutdown ->
             ok
-    after 1000 ->
+    after Timeout ->
         ct:fail(transport_not_shutdown)
     end.
 
 -spec transport_monitor_failure(shotgun_test_utils:config()) -> term().
 transport_monitor_failure(_) ->
     Down = {'DOWN', make_ref(), process, self(), transport_failed},
+    ?assertException(exit, transport_failed, shotgun:at_rest(cast, Down, #{})),
     ?assertException(exit, transport_failed, shotgun:wait_response(cast, Down, #{})),
     ?assertError(incomplete, shotgun:receive_data(cast, Down, #{})),
     ?assertError(incomplete, shotgun:receive_chunk(cast, Down, #{})),
@@ -90,3 +93,25 @@ invalid_chunked_uri(_) ->
     {error, missing_slash_uri} = shotgun:post(self(), "invalid", #{}, #{}),
     {error, missing_slash_uri} = shotgun:put(self(), "invalid", #{}, #{}),
     {error, missing_slash_uri} = shotgun:patch(self(), "invalid", #{}, #{}).
+
+-spec disconnect_transition(shotgun_test_utils:config()) -> term().
+disconnect_transition(_) ->
+    Timeout = ct:get_config(transport_shutdown_timeout, 1000),
+    Event = {gun_down, self(), http2, connection_lost, []},
+    State =
+        #{pid => self(),
+          protocol => http2,
+          allow_reconnect => false,
+          read_timeout => 500},
+    {stop, {shutdown, {gun_down, connection_lost}}, State} =
+        shotgun:receive_chunk(info, Event, State),
+    {next_state, down, Clean, [{{timeout, read}, infinity, read_timeout}]} =
+        shotgun:receive_chunk(info, Event, State#{allow_reconnect => true}),
+    infinity = maps:get(read_timeout, Clean),
+    http2 = maps:get(protocol, Clean),
+    receive
+        {'$gen_cast', shutdown} ->
+            ok
+    after Timeout ->
+        ct:fail(transport_not_shutdown)
+    end.
