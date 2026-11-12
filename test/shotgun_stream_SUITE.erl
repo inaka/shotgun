@@ -85,7 +85,12 @@ init_per_testcase(_, Config) ->
 -spec end_per_testcase(atom(), shotgun_test_utils:config()) ->
                           shotgun_test_utils:config().
 end_per_testcase(_, Config) ->
-    catch shotgun:close(?config(conn, Config)),
+    try
+        shotgun:close(?config(conn, Config))
+    catch
+        _:_ ->
+            ok
+    end,
     ok = cowboy:stop_listener(shotgun_stream_test),
     Config.
 

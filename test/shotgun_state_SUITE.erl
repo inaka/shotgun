@@ -5,6 +5,7 @@
          invalid_chunked_uri/1]).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -spec all() -> [atom()].
 all() ->
@@ -59,9 +60,9 @@ legacy_down(_) ->
 -spec transport_monitor_failure(shotgun_test_utils:config()) -> term().
 transport_monitor_failure(_) ->
     Down = {'DOWN', make_ref(), process, self(), transport_failed},
-    {'EXIT', transport_failed} = (catch shotgun:wait_response(cast, Down, #{})),
-    {'EXIT', {incomplete, _}} = (catch shotgun:receive_data(cast, Down, #{})),
-    {'EXIT', {incomplete, _}} = (catch shotgun:receive_chunk(cast, Down, #{})),
+    ?assertException(exit, transport_failed, shotgun:wait_response(cast, Down, #{})),
+    ?assertError(incomplete, shotgun:receive_data(cast, Down, #{})),
+    ?assertError(incomplete, shotgun:receive_chunk(cast, Down, #{})),
     ok.
 
 -spec unexpected_response_event(shotgun_test_utils:config()) -> term().
