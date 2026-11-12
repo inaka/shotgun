@@ -154,7 +154,7 @@ get(Pid, Uri, Headers) ->
 %% <ul>
 %%   <li>
 %%     <code>async</code>:
-%%     specifies if the request performed will return a chunked response.
+%%     specifies if the response body will be streamed over HTTP/1 or HTTP/2.
 %%     It currently only works for GET requests. Default value is false.
 %%   </li>
 %%   <li>
@@ -175,14 +175,14 @@ get(Pid, Uri, Headers) ->
 %%   <li>
 %%     <code>read_timeout</code>:
 %%     when async is true, the maximum time in milliseconds between two
-%%     chunks of a chunked response. The timer starts when the response
+%%     data messages of a streaming response. The timer starts when the response
 %%     headers arrive and restarts each time chunk data is delivered. When
 %%     no chunk data is delivered in that time, shotgun closes the
 %%     connection and the process exits with reason
 %%     <code>{shutdown, read_timeout}</code>. Monitor the connection pid to
 %%     be notified. Queued events are lost and <code>handle_event</code>
-%%     gets no final call. The option has no effect on responses without
-%%     chunked transfer encoding. The value must be <code>infinity</code>
+%%     gets no final call. The option applies to streaming responses over
+%%     HTTP/1 (chunked only) and HTTP/2. The value must be <code>infinity</code>
 %%     or a positive integer. Default value is <code>infinity</code>.
 %%   </li>
 %% </ul>
@@ -225,7 +225,7 @@ options(Pid, Uri, Headers, Options) ->
 %% using %% <code>Headers</code> as the content data.
 -spec patch(connection(), uri(), headers(), options()) -> result().
 patch(Pid, Uri, Headers, Options) ->
-    request(Pid, post, Uri, Headers, body_chunked, Options).
+    request(Pid, patch, Uri, Headers, body_chunked, Options).
 
 %% @doc Performs a <strong>PATCH</strong> request to <code>Uri</code> using
 %% <code>Headers</code> and <code>Body</code> as the content data.
@@ -338,6 +338,7 @@ parse_event(EventBin) ->
       headers => term(),
       pending_requests => queue:queue() | undefined,
       pid => pid() | undefined,
+      protocol => atom() | undefined,
       responses => queue:queue() | undefined,
       status_code => integer() | undefined,
       stream => reference() | undefined,
@@ -391,28 +392,23 @@ open_connection(Host, Port, Type, Opts) ->
     {ok, Pid} = gun:open(Host, Port, GunOpts),
     _ = monitor(process, Pid),
     case gun:await_up(Pid, Timeout) of
-        {ok, _} ->
+        {ok, Protocol} ->
             StateData = clean_state_data(),
-            {ok, StateData#{pid => Pid}};
+            {ok, StateData#{pid => Pid, protocol => Protocol}};
         %The only apparent timeout for gun:open is the connection timeout of the
         %underlying transport. So, a timeout message here comes from gun:await_up.
         {error, timeout} ->
             {error, gun_open_timeout};
-        %gun currently terminates with reason normal if gun:open fails to open
-        %the requested connection. This bubbles up through gun:await_up.
-        {error, normal} ->
-            {error, gun_open_failed};
-        %gun can terminate with reason {shutdown, nxdomain}; however, that's not
-        %explicitly specced and makes dialyzer unhappy, so we loosely pattern
-        %match it here.
+        % Gun wraps connection exits as {down, Reason}. All failures other
+        % than a timeout have the same public result (including normal exits).
         {error, _} ->
             {error, gun_open_failed}
     end.
 
 %% @private
 -spec handle_info(term(), atom(), term()) -> {next_state, atom(), statedata()}.
-handle_info({gun_up, Pid, _Protocol}, StateName, StateData = #{pid := Pid}) ->
-    {next_state, StateName, StateData};
+handle_info({gun_up, Pid, Protocol}, StateName, StateData = #{pid := Pid}) ->
+    {next_state, StateName, StateData#{protocol => Protocol}};
 handle_info({gun_down, Pid, Protocol, Reason, KilledStreams},
             _StateName,
             StateData = #{pid := Pid, allow_reconnect := AllowReconnect }) ->
@@ -538,11 +534,16 @@ wait_response(cast,
               {gun_response, _Pid, _StreamRef, nofin, StatusCode, Headers},
               #{from := From,
                 stream := StreamRef,
-                async := Async} =
+                async := Async,
+                protocol := Protocol} =
                   StateData) ->
     {StateName, Actions} =
-        case lists:keyfind(<<"transfer-encoding">>, 1, Headers) of
-            {<<"transfer-encoding">>, <<"chunked">>} when Async ->
+        %% Keep HTTP/1's historical chunked-only async behavior.
+        case {Async, Protocol, lists:keyfind(<<"transfer-encoding">>, 1, Headers)} of
+            {true, http2, _} ->
+                Result = {ok, StreamRef},
+                {receive_chunk, [{reply, From, Result}, read_timeout_action(StateData)]};
+            {true, _, {<<"transfer-encoding">>, <<"chunked">>}} ->
                 Result = {ok, StreamRef},
                 {receive_chunk, [{reply, From, Result}, read_timeout_action(StateData)]};
             _ ->
@@ -595,6 +596,11 @@ receive_data(cast,
            headers => Headers,
            body => NewData}},
     {next_state, at_rest, StateData, [{reply, From, Result}]};
+%% Trailers terminate a response without a final gun_data message.
+receive_data(cast,
+             {gun_trailers, Pid, StreamRef, _Trailers},
+             #{pid := Pid, stream := StreamRef} = StateData) ->
+    receive_data(cast, {gun_data, Pid, StreamRef, fin, <<>>}, StateData);
 receive_data(cast,
              {gun_error, _Pid, StreamRef, _Reason},
              #{stream := StreamRef} = StateData) ->
@@ -603,7 +609,7 @@ receive_data(info, Event, StateData) ->
     handle_info(Event, receive_data, StateData).
 
 %% @private
-%% @doc Chunked data response
+%% @doc Streaming response (HTTP/1 or HTTP/2)
 -spec receive_chunk({call, gen_statem:from()} | cast | info | {timeout, read},
                     term(),
                     statedata()) ->
@@ -629,6 +635,10 @@ receive_chunk(cast, {gun_data, _Pid, StreamRef, IsFin, Data}, StateData) ->
         nofin ->
             {next_state, receive_chunk, NewStateData, [read_timeout_action(NewStateData)]}
     end;
+receive_chunk(cast,
+              {gun_trailers, Pid, StreamRef, _Trailers},
+              #{pid := Pid, stream := StreamRef} = StateData) ->
+    receive_chunk(cast, {gun_data, Pid, StreamRef, fin, <<>>}, StateData);
 receive_chunk(cast, {gun_error, _Pid, _StreamRef, _Reason}, StateData) ->
     {next_state, at_rest, StateData, [{timeout, 0, 0}, cancel_read_timeout()]};
 receive_chunk({timeout, read}, read_timeout, StateData = #{pid := Pid, read_timeout := ReadTimeout}) ->
@@ -683,6 +693,7 @@ clean_state_data(StateData) ->
     Requests = maps:get(pending_requests, StateData, queue:new()),
     AllowReconnect = maps:get(allow_reconnect, StateData, true),
     #{pid => undefined,
+      protocol => maps:get(protocol, StateData, undefined),
       stream => undefined,
       handle_event => undefined,
       from => undefined,
@@ -700,7 +711,7 @@ clean_state_data(StateData) ->
 %% @private
 -spec do_http_verb(http_verb(), pid(), tuple()) -> reference().
 do_http_verb(Method, Pid, {Uri, Headers, body_chunked}) ->
-    gun:request(Pid, http_verb_bin(Method), Uri, Headers);
+    gun:headers(Pid, http_verb_bin(Method), Uri, Headers);
 do_http_verb(Method, Pid, {Uri, Headers, Body}) ->
     gun:request(Pid, http_verb_bin(Method), Uri, Headers, Body).
 

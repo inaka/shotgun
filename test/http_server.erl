@@ -8,10 +8,14 @@
 %%------------------------------------------------------------------------------
 
 %% @doc Starts the application
+-spec start() -> {ok, [atom()]} | {error, term()}.
+-spec start(application:start_type(), term()) -> {ok, pid()} | ignore | {error, term()}.
 start() ->
     application:ensure_all_started(?MODULE).
 
 %% @doc Stops the application
+-spec stop() -> ok | {error, term()}.
+-spec stop(term()) -> ok.
 stop() ->
     application:stop(?MODULE).
 

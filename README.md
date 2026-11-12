@@ -118,9 +118,19 @@ To use **shotgun** with endpoints that generate SSE the request must be
 configured using some values in the options map, which supports the following
 entries:
 
-- `async ::boolean()`: specifies if the request performed will return a chunked
-response. **It currently only works for GET requests.**. Default value is
-`false`.
+- `async ::boolean()`: delivers the response body incrementally over HTTP/1 or
+HTTP/2. HTTP/1 preserves its historical behavior: only responses with
+`Transfer-Encoding: chunked` are streamed; other responses, including those with
+`Content-Length`, return the complete `{ok, Response}` without invoking the
+stream callback or adding events to the queue. HTTP/2 responses are streamed
+regardless of `Content-Length`.
+**It currently only works for GET requests.** Default value is `false`.
+When a streaming response indicates more data will follow, the request returns
+`{ok, StreamRef}` immediately. Responses completed by the headers (for example,
+`204 No Content`) return `{ok, Response}` as usual. Streaming ends when Gun
+reports the final body data or response trailers; trailers are not exposed as
+body data. In `binary` mode, data boundaries depend on the transport and need
+not match server writes. In `sse` mode, data is buffered into SSE events.
 
 - `async_mode :: binary | sse`: when `async` is `true` the mode specifies
 how the data received will be processed. `binary` mode treats each chunk received
@@ -185,6 +195,18 @@ building the project as described above):
 ```sh
 rebar3 shell
 ```
+
+Run the test suite and check the required 100% line coverage of the application:
+
+```sh
+rebar3 ct
+rebar3 cover
+```
+
+The coverage report is written to `_build/test/cover/index.html`. Tests cover
+HTTP/1, cleartext HTTP/2, and HTTPS with HTTP/2 negotiated through ALPN. Test TLS
+credentials are generated in memory; no external server is required for these
+protocol tests.
 
 ## Contact Us
 If you find any **bugs** or have a **problem** while using this library, please
